@@ -36,22 +36,31 @@ function PageWithHeaderSidebar(props: PageProps) {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden overflow-x-hidden">
-      {/* Topbar */}
-      <div
-        className={cn(
-          'bg-sidebar dark:border-border relative flex h-14 w-full shrink-0 items-center justify-between overflow-x-hidden border-b px-4',
-          props.sticky === false
-            ? ''
-            : 'bg-sidebar sticky top-0 z-[100] backdrop-blur-md',
-        )}
-      >
-        {/* Desktop Navigation */}
-        <div className="hidden w-full min-w-0 flex-1 items-center space-x-8 overflow-x-hidden lg:flex">
-          {TopNavigation}
+      {/* Topbar - only render if TopNavigation exists */}
+      {TopNavigation && (
+        <div
+          className={cn(
+            'bg-sidebar dark:border-border relative flex h-14 w-full shrink-0 items-center justify-between overflow-x-hidden border-b px-4',
+            props.sticky === false
+              ? ''
+              : 'bg-sidebar sticky top-0 z-[100] backdrop-blur-md',
+          )}
+        >
+          {/* Desktop Navigation */}
+          <div className="hidden w-full min-w-0 flex-1 items-center space-x-8 overflow-x-hidden lg:flex">
+            {TopNavigation}
+          </div>
+          {/* Mobile Navigation */}
+          {MobileNavigation}
         </div>
-        {/* Mobile Navigation */}
-        {MobileNavigation}
-      </div>
+      )}
+
+      {/* Mobile Navigation - render separately if no topbar */}
+      {!TopNavigation && MobileNavigation && (
+        <div className="bg-sidebar dark:border-border relative flex h-14 w-full shrink-0 items-center justify-between overflow-x-hidden border-b px-4 lg:hidden">
+          {MobileNavigation}
+        </div>
+      )}
 
       {/* Sidebar + Content */}
       <div className="flex min-h-0 flex-1 overflow-hidden overflow-x-hidden">

@@ -198,7 +198,7 @@ export default function ConversationIndexPage() {
   const [isEditMode, setIsEditMode] = useState(false);
 
   return (
-    <div className="bg-background flex h-screen w-full flex-col overflow-hidden">
+    <div className="bg-background flex h-full w-full flex-col overflow-hidden">
       <div className="flex h-full flex-col">
         <section className="flex shrink-0 flex-col gap-6 px-8 py-6 lg:px-16 lg:py-10">
           <div className="flex items-center justify-between">

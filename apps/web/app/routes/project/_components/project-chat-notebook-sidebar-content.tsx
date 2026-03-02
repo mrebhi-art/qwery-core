@@ -15,6 +15,7 @@ import {
 } from '@qwery/ui/dropdown-menu';
 
 import { useWorkspace } from '~/lib/context/workspace-context';
+import { WorkspaceModeEnum } from '@qwery/domain/enums';
 import { useProjectOptional } from '~/lib/context/project-context';
 import { useGetConversationsByProject } from '~/lib/queries/use-get-conversations-by-project';
 import { Conversation } from '@qwery/domain/entities';
@@ -44,6 +45,7 @@ export function ProjectChatNotebookSidebarContent() {
   const { t } = useTranslation('common');
   const projectContext = useProjectOptional();
   const { workspace, repositories } = useWorkspace();
+  const isSimpleMode = workspace.mode === WorkspaceModeEnum.SIMPLE;
   const projectId = projectContext?.projectId;
   const projectSlug = projectContext?.projectSlug ?? undefined;
   const isProjectLoading = projectContext?.isLoading ?? false;
@@ -191,9 +193,6 @@ export function ProjectChatNotebookSidebarContent() {
     }
   };
 
-  const onConversationBookmark = () => {
-    toast.info('Bookmark feature coming soon');
-  };
 
   const createNotebookMutation = useCreateNotebook(
     repositories.notebook,
@@ -283,10 +282,12 @@ export function ProjectChatNotebookSidebarContent() {
                   <MessageCircle className="mr-2 size-4" />
                   New Chat
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={onNewNotebook}>
-                  <Notebook className="mr-2 size-4" />
-                  New Notebook
-                </DropdownMenuItem>
+                {!isSimpleMode && (
+                  <DropdownMenuItem onClick={onNewNotebook}>
+                    <Notebook className="mr-2 size-4" />
+                    New Notebook
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -307,15 +308,17 @@ export function ProjectChatNotebookSidebarContent() {
           onConversationShare={onConversationShare}
           onConversationBookmark={onConversationBookmark}
         />
-        <SidebarNotebookHistory
-          notebooks={mappedNotebooks}
-          isLoading={isProjectLoading || notebooks.isLoading}
-          currentNotebookSlug={currentNotebookSlug}
-          searchQuery={searchQuery}
-          onNotebookDelete={onNotebookDelete}
-          unsavedNotebookIds={unsavedNotebookIds}
-          isProcessing={isProcessing}
-        />
+        {!isSimpleMode && (
+          <SidebarNotebookHistory
+            notebooks={mappedNotebooks}
+            isLoading={isProjectLoading || notebooks.isLoading}
+            currentNotebookSlug={currentNotebookSlug}
+            searchQuery={searchQuery}
+            onNotebookDelete={onNotebookDelete}
+            unsavedNotebookIds={unsavedNotebookIds}
+            isProcessing={isProcessing}
+          />
+        )}
       </div>
     </>
   );

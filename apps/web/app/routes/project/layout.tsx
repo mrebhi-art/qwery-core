@@ -6,7 +6,6 @@ import {
   PageFooter,
   PageMobileNavigation,
   PageNavigation,
-  PageTopNavigation,
   AgentSidebar,
 } from '@qwery/ui/page';
 import { SidebarProvider } from '@qwery/ui/shadcn-sidebar';
@@ -15,8 +14,8 @@ import type { ResizableContentRef } from '@qwery/ui/page';
 
 import { LayoutFooter } from '../layout/_components/layout-footer';
 import { LayoutMobileNavigation } from '../layout/_components/layout-mobile-navigation';
-import { ProjectLayoutTopBar } from './_components/project-topbar';
 import { ProjectSidebar } from './_components/project-sidebar';
+import { ProjectBreadcrumb } from './_components/project-breadcrumb';
 import { AgentUIWrapper } from './_components/agent-ui-wrapper';
 import { useWorkspace } from '~/lib/context/workspace-context';
 import { WorkspaceModeEnum } from '@qwery/domain/enums';
@@ -226,9 +225,6 @@ function SidebarLayoutInner(
                 : undefined
             }
           >
-            <PageTopNavigation>
-              <ProjectLayoutTopBar />
-            </PageTopNavigation>
             <PageNavigation>
               <ProjectSidebar />
             </PageNavigation>
@@ -256,7 +252,14 @@ function SidebarLayoutInner(
                 />
               </AgentSidebar>
             )}
-            {props.children}
+            <div className="flex h-full flex-col">
+              <div className="bg-background px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
+                <ProjectBreadcrumb />
+              </div>
+              <div className="flex-1 overflow-hidden">
+                {props.children}
+              </div>
+            </div>
           </Page>
         </SidebarProvider>
       </LeaveConfirmationProvider>
@@ -282,36 +285,45 @@ function SimpleModeSidebarLayout(
     <ProjectProvider>
       <ProjectPausedOverlay />
       <AgentStatusProvider>
-        <Page>
-          <PageTopNavigation>
-            <ProjectLayoutTopBar />
-          </PageTopNavigation>
-          <PageMobileNavigation className={'flex items-center justify-between'}>
-            <LayoutMobileNavigation />
-          </PageMobileNavigation>
-          <PageFooter>
-            <LayoutFooter />
-          </PageFooter>
-          <AgentSidebar>
-            <AgentTabs
-              tabs={[
-                {
-                  id: 'query-sql-results',
-                  title: 'Results',
-                  description: 'Query SQL Results',
-                  component: <div>Query SQL Results</div>,
-                },
-                {
-                  id: 'query-sql-visualisation',
-                  title: 'Visualisation',
-                  description: 'Visualisation of the query SQL results',
-                  component: <div>Query SQL Results</div>,
-                },
-              ]}
-            />
-          </AgentSidebar>
-          {props.children}
-        </Page>
+        <SidebarProvider defaultOpen={true}>
+          <Page>
+            <PageNavigation>
+              <ProjectSidebar />
+            </PageNavigation>
+            <PageMobileNavigation className={'flex items-center justify-between'}>
+              <LayoutMobileNavigation />
+            </PageMobileNavigation>
+            <PageFooter>
+              <LayoutFooter />
+            </PageFooter>
+            <AgentSidebar>
+              <AgentTabs
+                tabs={[
+                  {
+                    id: 'query-sql-results',
+                    title: 'Results',
+                    description: 'Query SQL Results',
+                    component: <div>Query SQL Results</div>,
+                  },
+                  {
+                    id: 'query-sql-visualisation',
+                    title: 'Visualisation',
+                    description: 'Visualisation of the query SQL results',
+                    component: <div>Query SQL Results</div>,
+                  },
+                ]}
+              />
+            </AgentSidebar>
+            <div className="flex h-full flex-col">
+              <div className="bg-background px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
+                <ProjectBreadcrumb />
+              </div>
+              <div className="flex-1 overflow-hidden">
+                {props.children}
+              </div>
+            </div>
+          </Page>
+        </SidebarProvider>
       </AgentStatusProvider>
     </ProjectProvider>
   );

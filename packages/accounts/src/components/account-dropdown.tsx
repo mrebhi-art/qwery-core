@@ -2,7 +2,7 @@
 
 import { Link } from 'react-router';
 
-import { ChevronsUpDown, Home, MessageCircleQuestion } from 'lucide-react';
+import { ChevronsUpDown, Home, MessageCircleQuestion, Zap, Code2 } from 'lucide-react';
 
 import {
   DropdownMenu,
@@ -11,21 +11,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@qwery/ui/dropdown-menu';
-import { SubMenuModeToggle } from '@qwery/ui/mode-toggle';
 import { ProfileAvatar } from '@qwery/ui/profile-avatar';
 import { Trans } from '@qwery/ui/trans';
 import { cn } from '@qwery/ui/utils';
 
 export function AccountDropdown({
   paths,
+  workspaceMode,
+  onWorkspaceModeChange,
 }: {
   paths: {
     home: string;
   };
+  workspaceMode?: 'simple' | 'advanced';
+  onWorkspaceModeChange?: (mode: 'simple' | 'advanced') => void;
 }) {
   const displayName = 'Guepard';
   const signedInAsLabel = 'Anonymous User';
   const pictureUrl = 'https://github.com/guepard.png';
+  const currentMode = workspaceMode || 'simple';
 
   return (
     <DropdownMenu>
@@ -129,7 +133,39 @@ export function AccountDropdown({
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <SubMenuModeToggle />
+        <div className="px-2 py-1.5">
+          <p className="text-muted-foreground text-xs font-semibold tracking-wider uppercase mb-2">
+            Workspace Mode
+          </p>
+          <div className="space-y-1">
+            <DropdownMenuItem
+              className={cn(
+                'flex items-center gap-2 cursor-pointer',
+                currentMode === 'simple' && 'bg-accent'
+              )}
+              onClick={() => onWorkspaceModeChange?.('simple')}
+            >
+              <Zap className={cn(
+                'h-4 w-4',
+                currentMode === 'simple' ? 'text-[#ffcb51]' : 'text-muted-foreground'
+              )} />
+              <span>Simple mode</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className={cn(
+                'flex items-center gap-2 cursor-pointer',
+                currentMode === 'advanced' && 'bg-accent'
+              )}
+              onClick={() => onWorkspaceModeChange?.('advanced')}
+            >
+              <Code2 className={cn(
+                'h-4 w-4',
+                currentMode === 'advanced' ? 'text-[#ffcb51]' : 'text-muted-foreground'
+              )} />
+              <span>Advanced mode</span>
+            </DropdownMenuItem>
+          </div>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

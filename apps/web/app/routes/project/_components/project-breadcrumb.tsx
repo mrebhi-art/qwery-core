@@ -9,6 +9,7 @@ import {
   QweryBreadcrumb,
   type BreadcrumbNodeItem,
 } from '@qwery/ui/qwery-breadcrumb';
+import { truncateText } from '@qwery/ui/utils';
 import { useGetDatasourceExtensions } from '~/lib/queries/use-get-extension';
 
 import { useWorkspace } from '~/lib/context/workspace-context';
@@ -30,14 +31,17 @@ import { getErrorKey } from '~/lib/utils/error-key';
 import { OrganizationDialog } from '../../organizations/_components/organization-dialog';
 import { ProjectDialog } from '../../organization/_components/project-dialog';
 
+const BREADCRUMB_NAME_MAX_LENGTH = 28;
+
 function toBreadcrumbNodeItem<
   T extends { id: string; slug: string; name?: string; title?: string },
 >(item: T, icon?: string): BreadcrumbNodeItem {
-  const name = 'name' in item && item.name ? item.name : item.title || '';
+  const raw =
+    'name' in item && item.name ? item.name : (item.title as string) || '';
   return {
     id: item.id,
     slug: item.slug,
-    name,
+    name: truncateText(raw, BREADCRUMB_NAME_MAX_LENGTH),
     ...(icon && { icon }),
   };
 }
@@ -345,7 +349,10 @@ export function ProjectBreadcrumb() {
                     : (notebooks.data || []).map((nb) => ({
                         id: nb.id,
                         slug: nb.slug,
-                        name: nb.title,
+                        name: truncateText(
+                          nb.title,
+                          BREADCRUMB_NAME_MAX_LENGTH,
+                        ),
                       })),
                 isLoading:
                   currentObject.type === 'datasource'

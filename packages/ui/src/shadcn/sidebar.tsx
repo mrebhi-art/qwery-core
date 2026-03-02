@@ -249,7 +249,6 @@ const Sidebar = forwardRef<
         <div
           className={cn(
             'relative h-full bg-transparent',
-            'transition-[width] duration-200 ease-in-out',
             'w-[var(--sidebar-width)]',
             isOffcanvasCollapsed && 'w-0',
             isIconCollapsed &&
@@ -257,13 +256,14 @@ const Sidebar = forwardRef<
                 ? 'w-[calc(var(--sidebar-width-icon)+1rem)]'
                 : 'w-[var(--sidebar-width-icon)]'),
             'group-data-[side=right]:rotate-180',
+            'transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
           )}
         />
         <div
           data-sidebar="sidebar"
           className={cn(
             'bg-sidebar fixed top-0 z-10 hidden h-svh min-w-0 flex-col overflow-hidden md:flex',
-            'transition-[width,left,right] duration-200 ease-in-out',
+            'transition-[width,left,right] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
             'w-[var(--sidebar-width)]',
             isOffcanvasCollapsed && 'w-0',
             isIconCollapsed &&
@@ -356,6 +356,7 @@ const SidebarInset = React.forwardRef<
       className={cn(
         'bg-background relative flex w-full flex-1 flex-col',
         'md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2',
+        'transition-[margin] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
         className,
       )}
       {...props}
@@ -474,7 +475,7 @@ const SidebarGroupLabel = React.forwardRef<
       ref={ref}
       data-sidebar="group-label"
       className={cn(
-        'text-sidebar-foreground/70 ring-sidebar-ring flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium transition-[margin,opacity] duration-200 ease-linear outline-none focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0',
+        'text-sidebar-foreground/70 ring-sidebar-ring flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium transition-[margin,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] outline-none focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0',
         'group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0',
         className,
       )}
@@ -550,7 +551,7 @@ const SidebarMenuItem = React.forwardRef<
 SidebarMenuItem.displayName = 'SidebarMenuItem';
 
 const sidebarMenuButtonVariants = cva(
-  'peer/menu-button flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-2 group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!gap-0 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0',
+  'peer/menu-button flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-2 group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!gap-0 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0',
   {
     variants: {
       variant: {

@@ -32,7 +32,7 @@ import { Input } from '@qwery/ui/input';
 import { Trans } from '@qwery/ui/trans';
 import { Switch } from '@qwery/ui/switch';
 import { Checkbox } from '@qwery/ui/checkbox';
-import { cn } from '@qwery/ui/utils';
+import { cn, truncateText } from '@qwery/ui/utils';
 import { formatRelativeTime } from '@qwery/ui/ai-utils';
 import {
   DropdownMenu,
@@ -60,6 +60,7 @@ import { BulkActionBar } from '../../_components/bulk-action-bar';
 
 const ITEMS_PER_PAGE_GRID = 9;
 const ITEMS_PER_PAGE_TABLE = 10;
+const TABLE_NAME_MAX_LENGTH = 40;
 
 type SortCriterion = 'date' | 'name';
 type SortOrder = 'asc' | 'desc';
@@ -602,9 +603,15 @@ export function ListOrganizations({
                                 />
                               </svg>
                             </div>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-semibold">
-                                {highlightMatch(org.name, searchQuery)}
+                            <div className="flex min-w-0 flex-1 flex-col">
+                              <span
+                                className="text-sm font-semibold"
+                                title={org.name}
+                              >
+                                {highlightMatch(
+                                  truncateText(org.name, TABLE_NAME_MAX_LENGTH),
+                                  searchQuery,
+                                )}
                               </span>
                             </div>
                           </div>

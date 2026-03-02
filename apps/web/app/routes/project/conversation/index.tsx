@@ -234,32 +234,34 @@ export default function ConversationIndexPage() {
           </div>
         </section>
 
-        <div className="min-h-0 flex-1 overflow-hidden px-8 lg:px-16">
-          {isLoading ? (
-            <div className="bg-muted/10 h-full w-full animate-pulse rounded-2xl" />
-          ) : (
-            <ConversationList
-              conversations={mappedConversations}
-              isLoading={isLoading}
-              currentConversationId={currentConversationId}
-              isProcessing={isProcessing}
-              processingConversationSlug={
-                processingConversationSlug || undefined
-              }
-              onConversationSelect={onConversationSelect}
-              onNewConversation={onNewConversation}
-              onConversationEdit={onConversationEdit}
-              onConversationDelete={onConversationDelete}
-              onConversationsDelete={onConversationsDelete}
-              showHeader={false}
-              showNewButton={false}
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-              isEditMode={isEditMode}
-              onEditModeChange={setIsEditMode}
-              className="h-full"
-            />
-          )}
+        <div className="min-h-0 flex-1 overflow-auto">
+          <div className="h-full px-8 py-6 lg:px-16 lg:py-8">
+            {isLoading ? (
+              <div className="bg-muted/10 h-full w-full animate-pulse rounded-2xl" />
+            ) : (
+              <ConversationList
+                conversations={mappedConversations}
+                isLoading={isLoading}
+                currentConversationId={currentConversationId}
+                isProcessing={isProcessing}
+                processingConversationSlug={
+                  processingConversationSlug || undefined
+                }
+                onConversationSelect={onConversationSelect}
+                onNewConversation={onNewConversation}
+                onConversationEdit={onConversationEdit}
+                onConversationDelete={onConversationDelete}
+                onConversationsDelete={onConversationsDelete}
+                showHeader={false}
+                showNewButton={false}
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                isEditMode={isEditMode}
+                onEditModeChange={setIsEditMode}
+                className="h-full"
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

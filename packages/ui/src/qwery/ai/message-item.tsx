@@ -14,6 +14,9 @@ import {
   CheckIcon,
   XIcon,
   PencilIcon,
+  MoreVertical as MoreVerticalIcon,
+  FileText as FileTextIcon,
+  Archive as ArchiveIcon,
 } from 'lucide-react';
 import { Message, MessageContent } from '../../ai-elements/message';
 import { normalizeUIRole } from '@qwery/shared/message-role-utils';
@@ -51,6 +54,16 @@ import {
   type FeedbackPayload,
   getFeedbackFromMetadata,
 } from './feedback-types';
+import {
+  messagesToMarkdown,
+  downloadMarkdown,
+} from './utils/export-to-markdown';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../shadcn/dropdown-menu';
 
 export interface MessageItemProps {
   message: UIMessage;
@@ -103,6 +116,7 @@ export interface MessageItemProps {
   ) => Promise<boolean>;
   onDatasourceNameClick?: (id: string, name: string) => void;
   getDatasourceTooltip?: (id: string) => string;
+  conversationTitle?: string;
 }
 
 function getExecutionTimeMs(
@@ -159,12 +173,52 @@ function MessageItemComponent({
   onDatasourceNameClick,
   getDatasourceTooltip,
   onToolApproval,
+  conversationTitle,
 }: MessageItemProps) {
   const { t } = useTranslation('common');
+  const { t: tChat } = useTranslation('chat');
   useToolVariant();
   const sourceParts = message.parts.filter(
     (part: { type: string }) => part.type === 'source-url',
   );
+
+  const getChartSvg = (messageId: string, partIndex: number): string | null => {
+    const element = document.querySelector(
+      `[data-export-key="${messageId}-${partIndex}"] svg`,
+    );
+    if (!element) return null;
+    try {
+      return new XMLSerializer().serializeToString(element as SVGElement);
+    } catch {
+      return null;
+    }
+  };
+
+  const handleExportResponse = () => {
+    const messageIndex = messages.findIndex((m) => m.id === message.id);
+    const userMessage =
+      messageIndex > 0 && messages[messageIndex - 1]?.role === 'user'
+        ? messages[messageIndex - 1]
+        : null;
+
+    const messagesToExport = userMessage ? [userMessage, message] : [message];
+
+    const md = messagesToMarkdown(messagesToExport, undefined, { getChartSvg });
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `response-${date}-${message.id.slice(0, 8)}`;
+    downloadMarkdown(md, filename);
+  };
+
+  const handleExportChat = () => {
+    const messageIndex = messages.findIndex((m) => m.id === message.id);
+    const messagesUpToThisPoint = messages.slice(0, messageIndex + 1);
+    const md = messagesToMarkdown(messagesUpToThisPoint, conversationTitle, {
+      getChartSvg,
+    });
+    const filename =
+      conversationTitle || `chat-${new Date().toISOString().slice(0, 10)}`;
+    downloadMarkdown(md, filename);
+  };
 
   const textParts = message.parts.filter((p) => p.type === 'text');
   const isLastAssistantMessage = message.id === lastAssistantMessage?.id;
@@ -728,6 +782,36 @@ function MessageItemComponent({
                                           <CopyIcon className="size-3" />
                                         )}
                                       </Button>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7"
+                                            title="Export"
+                                          >
+                                            <MoreVerticalIcon className="size-3" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem
+                                            onClick={handleExportResponse}
+                                          >
+                                            <FileTextIcon className="mr-2 size-4" />
+                                            {tChat('export_response', {
+                                              defaultValue: 'Export response',
+                                            })}
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={handleExportChat}
+                                          >
+                                            <ArchiveIcon className="mr-2 size-4" />
+                                            {tChat('export_chat', {
+                                              defaultValue: 'Export chat',
+                                            })}
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
                                     </div>
                                   )}
                               </>

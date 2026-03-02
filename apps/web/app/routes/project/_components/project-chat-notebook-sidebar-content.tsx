@@ -193,7 +193,6 @@ export function ProjectChatNotebookSidebarContent() {
     }
   };
 
-
   const createNotebookMutation = useCreateNotebook(
     repositories.notebook,
     (notebook) => {
@@ -251,7 +250,7 @@ export function ProjectChatNotebookSidebarContent() {
 
   return (
     <>
-      <SidebarGroup>
+      <SidebarGroup className="group-data-[collapsible=icon]:hidden">
         <SidebarGroupContent>
           <div className="relative">
             <Search className="text-muted-foreground absolute top-1/2 left-2 size-4 -translate-y-1/2" />
@@ -306,7 +305,6 @@ export function ProjectChatNotebookSidebarContent() {
           onConversationDelete={onConversationDelete}
           onConversationDuplicate={onConversationDuplicate}
           onConversationShare={onConversationShare}
-          onConversationBookmark={onConversationBookmark}
         />
         {!isSimpleMode && (
           <SidebarNotebookHistory

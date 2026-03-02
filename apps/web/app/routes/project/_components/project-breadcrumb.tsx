@@ -320,6 +320,7 @@ export function ProjectBreadcrumb() {
   return (
     <>
       <QweryBreadcrumb
+        hideOrganization
         organization={{
           items: organizationItemsWithCurrentFirst,
           isLoading: organizations.isLoading,

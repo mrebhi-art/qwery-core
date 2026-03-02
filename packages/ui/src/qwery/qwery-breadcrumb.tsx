@@ -54,7 +54,7 @@ interface NodeDropdownProps {
   loadingLabel?: string;
 }
 
-function NodeDropdown({
+export function NodeDropdown({
   config,
   loadingLabel = 'Loading...',
   noResultsLabel = 'No results found',
@@ -276,6 +276,7 @@ export function GenericBreadcrumb({
 }
 
 export interface QweryBreadcrumbProps {
+  hideOrganization?: boolean;
   organization?: {
     items: BreadcrumbNodeItem[];
     isLoading: boolean;
@@ -314,6 +315,7 @@ export interface QweryBreadcrumbProps {
 }
 
 export function QweryBreadcrumb({
+  hideOrganization = false,
   organization,
   project,
   object,
@@ -335,8 +337,7 @@ export function QweryBreadcrumb({
 
   const nodes: BreadcrumbNodeConfig[] = [];
 
-  // Organization node
-  if (organization) {
+  if (organization && !hideOrganization) {
     nodes.push({
       items: organization.items,
       current: organization.current,

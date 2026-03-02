@@ -17,9 +17,7 @@ function SidebarLayout(props: Route.ComponentProps & React.PropsWithChildren) {
 
   return (
     <SidebarProvider defaultOpen={layoutState.open}>
-      <Page>
-        {props.children}
-      </Page>
+      <Page>{props.children}</Page>
     </SidebarProvider>
   );
 }

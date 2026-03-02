@@ -228,6 +228,7 @@
     "schemaEmptyOrNotLoaded": "The schema information is empty or could not be loaded."
   },
   "sidebar": {
+    "organization": "Organization",
     "recentChats": "Recent chats",
     "recentNotebooks": "Recent notebooks",
     "viewAllChats": "View all chats",

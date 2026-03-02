@@ -1,19 +1,12 @@
 import { Outlet, useSearchParams, useLocation } from 'react-router';
 import { useEffect, useRef, useState, useMemo } from 'react';
 
-import {
-  Page,
-  PageFooter,
-  PageMobileNavigation,
-  PageNavigation,
-  AgentSidebar,
-} from '@qwery/ui/page';
+import { Page, PageFooter, PageNavigation, AgentSidebar } from '@qwery/ui/page';
 import { SidebarProvider } from '@qwery/ui/shadcn-sidebar';
 import type { Route } from '~/types/app/routes/project/+types/layout';
 import type { ResizableContentRef } from '@qwery/ui/page';
 
 import { LayoutFooter } from '../layout/_components/layout-footer';
-import { LayoutMobileNavigation } from '../layout/_components/layout-mobile-navigation';
 import { ProjectSidebar } from './_components/project-sidebar';
 import { ProjectBreadcrumb } from './_components/project-breadcrumb';
 import { AgentUIWrapper } from './_components/agent-ui-wrapper';
@@ -228,11 +221,6 @@ function SidebarLayoutInner(
             <PageNavigation>
               <ProjectSidebar />
             </PageNavigation>
-            <PageMobileNavigation
-              className={'flex items-center justify-between'}
-            >
-              <LayoutMobileNavigation />
-            </PageMobileNavigation>
             <PageFooter>
               <LayoutFooter />
             </PageFooter>
@@ -256,9 +244,7 @@ function SidebarLayoutInner(
               <div className="bg-background px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
                 <ProjectBreadcrumb />
               </div>
-              <div className="flex-1 overflow-hidden">
-                {props.children}
-              </div>
+              <div className="flex-1 overflow-hidden">{props.children}</div>
             </div>
           </Page>
         </SidebarProvider>
@@ -290,9 +276,6 @@ function SimpleModeSidebarLayout(
             <PageNavigation>
               <ProjectSidebar />
             </PageNavigation>
-            <PageMobileNavigation className={'flex items-center justify-between'}>
-              <LayoutMobileNavigation />
-            </PageMobileNavigation>
             <PageFooter>
               <LayoutFooter />
             </PageFooter>
@@ -318,9 +301,7 @@ function SimpleModeSidebarLayout(
               <div className="bg-background px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
                 <ProjectBreadcrumb />
               </div>
-              <div className="flex-1 overflow-hidden">
-                {props.children}
-              </div>
+              <div className="flex-1 overflow-hidden">{props.children}</div>
             </div>
           </Page>
         </SidebarProvider>

@@ -12,6 +12,7 @@ import {
   Share2,
   Trash2,
   MoreHorizontal,
+  Pin,
 } from 'lucide-react';
 import { cn, truncateChatTitle } from '@qwery/ui/utils';
 import {
@@ -21,6 +22,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  useSidebar,
 } from '@qwery/ui/shadcn-sidebar';
 import {
   ContextMenu,
@@ -98,6 +100,7 @@ export function SidebarConversationHistory({
   const { t } = useTranslation('common');
   const location = useLocation();
   const { projectSlug } = useProject();
+  const { state: sidebarState } = useSidebar();
 
   // Get current conversation slug directly from URL for reliable active state
   const conversationSlugMatch = location.pathname.match(/\/c\/([^/]+)$/);
@@ -108,6 +111,7 @@ export function SidebarConversationHistory({
   const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set());
   const [isRecentsOpen, setIsRecentsOpen] = useState(true);
   const initialOpenSetRef = useRef(false);
+  const prevSidebarStateRef = useRef(sidebarState);
 
   useEffect(() => {
     if (!projectSlug) return;
@@ -125,6 +129,16 @@ export function SidebarConversationHistory({
       setIsRecentsOpen(!!hasAny);
     }, 0);
   }, [isLoading, conversations.length, currentConversationId, conversations]);
+
+  useEffect(() => {
+    if (
+      prevSidebarStateRef.current === 'expanded' &&
+      sidebarState === 'collapsed'
+    ) {
+      queueMicrotask(() => setIsRecentsOpen(false));
+    }
+    prevSidebarStateRef.current = sidebarState;
+  }, [sidebarState]);
 
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(() => {
     if (typeof window !== 'undefined') {
@@ -225,33 +239,80 @@ export function SidebarConversationHistory({
     );
   }, [filteredConversations, currentSlugFromUrl]);
 
-  // Sort conversations by selection order: current first, then by selection timestamp, then by createdAt
-  const otherConversations = useMemo(() => {
-    const others = filteredConversations.filter(
-      (c) => c.slug !== currentSlugFromUrl,
-    );
+  // Separate pinned and unpinned conversations
+  const {
+    pinnedConversations,
+    unpinnedConversations,
+    currentConversationIsPinned,
+  } = useMemo(() => {
+    const currentIsPinned = currentConversation
+      ? bookmarkedIds.has(currentConversation.id)
+      : false;
 
-    return others.sort((a, b) => {
-      const aTimestamp = selectionOrderMap.get(a.id);
-      const bTimestamp = selectionOrderMap.get(b.id);
+    const others = currentIsPinned
+      ? filteredConversations
+      : filteredConversations.filter((c) => c.slug !== currentSlugFromUrl);
 
-      // Both have selection timestamps: sort by timestamp descending (higher = more recent)
-      if (aTimestamp !== undefined && bTimestamp !== undefined) {
-        return bTimestamp - aTimestamp;
-      }
-      // Only a has timestamp: a comes first
-      if (aTimestamp !== undefined) return -1;
-      // Only b has timestamp: b comes first
-      if (bTimestamp !== undefined) return 1;
-      // Neither has timestamp: sort by createdAt (newest first)
-      return b.createdAt.getTime() - a.createdAt.getTime();
-    });
-  }, [filteredConversations, currentSlugFromUrl, selectionOrderMap]);
+    const pinned = others.filter((c) => bookmarkedIds.has(c.id));
+    const unpinned = others.filter((c) => !bookmarkedIds.has(c.id));
+
+    const sortPinned = (group: typeof others) => {
+      return group.sort((a, b) => {
+        const aIsCurrent = a.slug === currentSlugFromUrl;
+        const bIsCurrent = b.slug === currentSlugFromUrl;
+        if (aIsCurrent && !bIsCurrent) return -1;
+        if (!aIsCurrent && bIsCurrent) return 1;
+
+        const aTimestamp = selectionOrderMap.get(a.id);
+        const bTimestamp = selectionOrderMap.get(b.id);
+
+        if (aTimestamp !== undefined && bTimestamp !== undefined) {
+          return bTimestamp - aTimestamp;
+        }
+        if (aTimestamp !== undefined) return -1;
+        if (bTimestamp !== undefined) return 1;
+
+        return b.createdAt.getTime() - a.createdAt.getTime();
+      });
+    };
+
+    const sortUnpinned = (group: typeof others) => {
+      return group.sort((a, b) => {
+        const aTimestamp = selectionOrderMap.get(a.id);
+        const bTimestamp = selectionOrderMap.get(b.id);
+
+        if (aTimestamp !== undefined && bTimestamp !== undefined) {
+          return bTimestamp - aTimestamp;
+        }
+        if (aTimestamp !== undefined) return -1;
+        if (bTimestamp !== undefined) return 1;
+
+        return b.createdAt.getTime() - a.createdAt.getTime();
+      });
+    };
+
+    return {
+      pinnedConversations: sortPinned(pinned),
+      unpinnedConversations: sortUnpinned(unpinned),
+      currentConversationIsPinned: currentIsPinned,
+    };
+  }, [
+    filteredConversations,
+    currentSlugFromUrl,
+    selectionOrderMap,
+    bookmarkedIds,
+    currentConversation,
+  ]);
 
   const MAX_SIDEBAR_CHATS = 6;
-  const limitedConversations = useMemo(() => {
-    return otherConversations.slice(0, MAX_SIDEBAR_CHATS);
-  }, [otherConversations]);
+  const limitedPinnedConversations = useMemo(
+    () => pinnedConversations.slice(0, MAX_SIDEBAR_CHATS),
+    [pinnedConversations],
+  );
+  const limitedUnpinnedConversations = useMemo(
+    () => unpinnedConversations.slice(0, MAX_SIDEBAR_CHATS),
+    [unpinnedConversations],
+  );
 
   const handleStartEdit = (conversationId: string, currentTitle: string) => {
     setEditingId(conversationId);
@@ -442,8 +503,228 @@ export function SidebarConversationHistory({
                   <div className="from-sidebar pointer-events-none absolute right-0 bottom-0 left-0 z-10 h-12 bg-gradient-to-t to-transparent" />
 
                   <SidebarMenu className="pb-12">
-                    {/* Current Conversation - Always on top */}
-                    {currentConversation && (
+                    {/* Pinned Conversations - Always at top */}
+                    {limitedPinnedConversations.map((conversation) => {
+                      const isEditing = editingId === conversation.id;
+                      const isActive = conversation.slug === currentSlugFromUrl;
+                      const conversationPath = createPath(
+                        pathsConfig.app.conversation,
+                        conversation.slug,
+                      );
+
+                      return (
+                        <SidebarMenuItem
+                          key={conversation.id}
+                          className="group"
+                        >
+                          <ContextMenu>
+                            <ContextMenuTrigger asChild>
+                              <div className="w-full">
+                                <SidebarMenuButton
+                                  asChild
+                                  isActive={isActive}
+                                  tooltip={conversation.title}
+                                >
+                                  <Link
+                                    to={conversationPath}
+                                    className="group flex w-full min-w-0 items-center gap-2"
+                                  >
+                                    {isEditing ? (
+                                      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                        <Input
+                                          ref={editInputRef}
+                                          type="text"
+                                          value={editValue}
+                                          onChange={(e) =>
+                                            setEditValue(e.target.value)
+                                          }
+                                          onBlur={() =>
+                                            handleEditBlur(conversation.id)
+                                          }
+                                          onKeyDown={(e) =>
+                                            handleEditKeyDown(
+                                              e,
+                                              conversation.id,
+                                            )
+                                          }
+                                          onClick={(e) => e.stopPropagation()}
+                                          onMouseDown={(e) =>
+                                            e.stopPropagation()
+                                          }
+                                          className="h-auto flex-1 border-0 bg-transparent px-2 py-0 text-sm font-medium shadow-none focus-visible:ring-0"
+                                          placeholder={t(
+                                            'sidebar.chatTitlePlaceholder',
+                                          )}
+                                          maxLength={100}
+                                        />
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleCancelEdit(conversation.id);
+                                          }}
+                                          onMouseDown={(e) =>
+                                            e.stopPropagation()
+                                          }
+                                          className="text-muted-foreground hover:text-foreground hover:bg-accent shrink-0 rounded p-1 transition-colors"
+                                          aria-label={t(
+                                            'sidebar.discardChanges',
+                                          )}
+                                        >
+                                          <X className="size-3.5" />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        {bookmarkedIds.has(conversation.id) && (
+                                          <Pin className="size-3 shrink-0 fill-current text-[#ffcb51]" />
+                                        )}
+                                        <span
+                                          className={cn(
+                                            'min-w-0 flex-1 truncate text-sm font-medium transition-all duration-300',
+                                            animatingIds.has(conversation.id) &&
+                                              'animate-in fade-in-0 slide-in-from-left-2',
+                                          )}
+                                          title={conversation.title}
+                                        >
+                                          {truncateChatTitle(
+                                            conversation.title,
+                                          )}
+                                        </span>
+                                        <div className="relative shrink-0">
+                                          {processingConversationSlug ===
+                                          conversation.slug ? (
+                                            <div className="absolute top-1/2 left-1/2 size-2 shrink-0 -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full bg-blue-500 shadow-sm shadow-blue-500/50 transition-opacity group-hover:opacity-0" />
+                                          ) : null}
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <button
+                                                onClick={(e) =>
+                                                  e.stopPropagation()
+                                                }
+                                                className="text-muted-foreground hover:text-foreground hover:bg-accent shrink-0 cursor-pointer rounded p-1 opacity-0 transition-all group-hover:opacity-100"
+                                              >
+                                                <MoreHorizontal className="size-4" />
+                                              </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                              <DropdownMenuItem
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleStartEdit(
+                                                    conversation.id,
+                                                    conversation.title,
+                                                  );
+                                                }}
+                                              >
+                                                <Pencil className="mr-2 size-4" />
+                                                <Trans i18nKey="common:sidebar.rename" />
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleBookmark(
+                                                    conversation.id,
+                                                  );
+                                                }}
+                                              >
+                                                <Bookmark
+                                                  className={cn(
+                                                    'mr-2 size-4',
+                                                    bookmarkedIds.has(
+                                                      conversation.id,
+                                                    ) && 'fill-current',
+                                                  )}
+                                                />
+                                                {bookmarkedIds.has(
+                                                  conversation.id,
+                                                ) ? (
+                                                  <Trans i18nKey="common:sidebar.unpin" />
+                                                ) : (
+                                                  <Trans i18nKey="common:sidebar.pinChat" />
+                                                )}
+                                              </DropdownMenuItem>
+                                              <DropdownMenuSeparator />
+                                              <DropdownMenuItem
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleDeleteClick(
+                                                    conversation.id,
+                                                  );
+                                                }}
+                                                className="text-destructive focus:text-destructive"
+                                              >
+                                                <Trash2 className="mr-2 size-4" />
+                                                <Trans i18nKey="common:sidebar.delete" />
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        </div>
+                                      </>
+                                    )}
+                                  </Link>
+                                </SidebarMenuButton>
+                              </div>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent>
+                              <ContextMenuItem
+                                onClick={() =>
+                                  handleStartEdit(
+                                    conversation.id,
+                                    conversation.title,
+                                  )
+                                }
+                              >
+                                <Pencil className="mr-2 size-4" />
+                                <Trans i18nKey="common:sidebar.rename" />
+                              </ContextMenuItem>
+                              {onConversationBookmark && (
+                                <ContextMenuItem
+                                  onClick={() =>
+                                    onConversationBookmark(conversation.id)
+                                  }
+                                >
+                                  <Bookmark className="mr-2 size-4" />
+                                  Bookmark
+                                </ContextMenuItem>
+                              )}
+                              {onConversationDuplicate && (
+                                <ContextMenuItem
+                                  onClick={() =>
+                                    onConversationDuplicate(conversation.id)
+                                  }
+                                >
+                                  <Copy className="mr-2 size-4" />
+                                  Duplicate
+                                </ContextMenuItem>
+                              )}
+                              {onConversationShare && (
+                                <ContextMenuItem
+                                  onClick={() =>
+                                    onConversationShare(conversation.id)
+                                  }
+                                >
+                                  <Share2 className="mr-2 size-4" />
+                                  Share
+                                </ContextMenuItem>
+                              )}
+                              <ContextMenuSeparator />
+                              <ContextMenuItem
+                                onClick={() =>
+                                  handleDeleteClick(conversation.id)
+                                }
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="mr-2 size-4" />
+                                <Trans i18nKey="common:sidebar.delete" />
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        </SidebarMenuItem>
+                      );
+                    })}
+
+                    {/* Current Conversation - Show in second place if not pinned */}
+                    {currentConversation && !currentConversationIsPinned && (
                       <SidebarMenuItem>
                         <ContextMenu>
                           <ContextMenuTrigger asChild>
@@ -502,6 +783,11 @@ export function SidebarConversationHistory({
                                     </div>
                                   ) : (
                                     <>
+                                      {bookmarkedIds.has(
+                                        currentConversation.id,
+                                      ) && (
+                                        <Pin className="size-3 shrink-0 fill-current text-[#ffcb51]" />
+                                      )}
                                       <span
                                         className={cn(
                                           'min-w-0 flex-1 truncate text-sm font-medium transition-all duration-300',
@@ -660,7 +946,7 @@ export function SidebarConversationHistory({
                     )}
 
                     {/* Other Conversations - Flat list */}
-                    {limitedConversations.map((conversation) => {
+                    {limitedUnpinnedConversations.map((conversation) => {
                       const isEditing = editingId === conversation.id;
                       const isActive = conversation.slug === currentSlugFromUrl;
                       const conversationPath = createPath(
@@ -669,7 +955,10 @@ export function SidebarConversationHistory({
                       );
 
                       return (
-                        <SidebarMenuItem key={conversation.id}>
+                        <SidebarMenuItem
+                          key={conversation.id}
+                          className="group"
+                        >
                           <ContextMenu>
                             <ContextMenuTrigger asChild>
                               <div className="w-full">
@@ -728,6 +1017,9 @@ export function SidebarConversationHistory({
                                       </div>
                                     ) : (
                                       <>
+                                        {bookmarkedIds.has(conversation.id) && (
+                                          <Pin className="size-3 shrink-0 fill-current text-[#ffcb51]" />
+                                        )}
                                         <span
                                           className={cn(
                                             'min-w-0 flex-1 truncate text-sm font-medium transition-all duration-300',
@@ -932,6 +1224,7 @@ export function SidebarNotebookHistory({
   const { t } = useTranslation('common');
   const location = useLocation();
   const { projectSlug } = useProject();
+  const { state: sidebarState } = useSidebar();
 
   const notebookSlugMatch = location.pathname.match(/\/notebook\/([^/]+)$/);
   const currentSlugFromUrl = notebookSlugMatch?.[1];
@@ -941,11 +1234,22 @@ export function SidebarNotebookHistory({
   const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set());
   const [isRecentsOpen, setIsRecentsOpen] = useState(true);
   const initialOpenSetRef = useRef(false);
+  const prevSidebarStateRef = useRef(sidebarState);
 
   useEffect(() => {
     if (!projectSlug) return;
     initialOpenSetRef.current = false;
   }, [projectSlug]);
+
+  useEffect(() => {
+    if (
+      prevSidebarStateRef.current === 'expanded' &&
+      sidebarState === 'collapsed'
+    ) {
+      queueMicrotask(() => setIsRecentsOpen(false));
+    }
+    prevSidebarStateRef.current = sidebarState;
+  }, [sidebarState]);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [notebookToDelete, setNotebookToDelete] = useState<string | null>(null);

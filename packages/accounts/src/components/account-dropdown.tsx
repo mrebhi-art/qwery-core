@@ -2,7 +2,13 @@
 
 import { Link } from 'react-router';
 
-import { ChevronsUpDown, Home, MessageCircleQuestion, Zap, Code2 } from 'lucide-react';
+import {
+  ChevronsUpDown,
+  Home,
+  MessageCircleQuestion,
+  Zap,
+  Code2,
+} from 'lucide-react';
 
 import {
   DropdownMenu,
@@ -37,18 +43,15 @@ export function AccountDropdown({
         aria-label="Open your profile menu"
         data-test={'account-dropdown-trigger'}
         className={cn(
-          'animate-in fade-in focus:outline-primary flex cursor-pointer items-center duration-500 group-data-[minimized=true]:px-0',
-          '',
-          {
-            ['active:bg-secondary/50 items-center gap-4 rounded-md' +
-            ' hover:bg-secondary p-2 transition-colors']: true,
-          },
+          'animate-in fade-in focus:outline-primary flex cursor-pointer items-center justify-center duration-500',
+          'active:bg-secondary/50 hover:bg-secondary items-center gap-4 rounded-md p-2 transition-colors',
+          'group-data-[minimized=true]:p-1.5 group-data-[minimized=true]:px-0',
         )}
       >
         <ProfileAvatar
-          className={'rounded-md'}
-          fallbackClassName={'rounded-md border'}
-          displayName={''}
+          className="size-8 rounded-md group-data-[minimized=true]:size-7"
+          fallbackClassName="rounded-md border"
+          displayName=""
           pictureUrl={pictureUrl}
         />
         <div
@@ -134,34 +137,42 @@ export function AccountDropdown({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5">
-          <p className="text-muted-foreground text-xs font-semibold tracking-wider uppercase mb-2">
+          <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-wider uppercase">
             Workspace Mode
           </p>
           <div className="space-y-1">
             <DropdownMenuItem
               className={cn(
-                'flex items-center gap-2 cursor-pointer',
-                currentMode === 'simple' && 'bg-accent'
+                'flex cursor-pointer items-center gap-2',
+                currentMode === 'simple' && 'bg-accent',
               )}
               onClick={() => onWorkspaceModeChange?.('simple')}
             >
-              <Zap className={cn(
-                'h-4 w-4',
-                currentMode === 'simple' ? 'text-[#ffcb51]' : 'text-muted-foreground'
-              )} />
+              <Zap
+                className={cn(
+                  'h-4 w-4',
+                  currentMode === 'simple'
+                    ? 'text-[#ffcb51]'
+                    : 'text-muted-foreground',
+                )}
+              />
               <span>Simple mode</span>
             </DropdownMenuItem>
             <DropdownMenuItem
               className={cn(
-                'flex items-center gap-2 cursor-pointer',
-                currentMode === 'advanced' && 'bg-accent'
+                'flex cursor-pointer items-center gap-2',
+                currentMode === 'advanced' && 'bg-accent',
               )}
               onClick={() => onWorkspaceModeChange?.('advanced')}
             >
-              <Code2 className={cn(
-                'h-4 w-4',
-                currentMode === 'advanced' ? 'text-[#ffcb51]' : 'text-muted-foreground'
-              )} />
+              <Code2
+                className={cn(
+                  'h-4 w-4',
+                  currentMode === 'advanced'
+                    ? 'text-[#ffcb51]'
+                    : 'text-muted-foreground',
+                )}
+              />
               <span>Advanced mode</span>
             </DropdownMenuItem>
           </div>

@@ -16,7 +16,10 @@ export function AccountDropdownContainer() {
   const { mutate: switchWorkspaceMode } = useSwitchWorkspaceMode();
 
   const handleWorkspaceModeChange = (mode: 'simple' | 'advanced') => {
-    const modeEnum = mode === 'advanced' ? WorkspaceModeEnum.ADVANCED : WorkspaceModeEnum.SIMPLE;
+    const modeEnum =
+      mode === 'advanced'
+        ? WorkspaceModeEnum.ADVANCED
+        : WorkspaceModeEnum.SIMPLE;
     switchWorkspaceMode(modeEnum, {
       onSuccess: () => {
         window.location.reload();

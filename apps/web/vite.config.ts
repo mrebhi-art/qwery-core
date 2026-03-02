@@ -153,6 +153,9 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   optimizeDeps: {
     exclude: [
       'fsevents',

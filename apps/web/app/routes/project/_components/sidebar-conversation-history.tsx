@@ -51,6 +51,7 @@ import pathsConfig from '~/config/paths.config';
 import { type Conversation, ConfirmDeleteDialog } from '@qwery/ui/ai';
 import { LoadingSkeleton } from '@qwery/ui/loading-skeleton';
 import { useProject } from '~/lib/context/project-context';
+import { useConversationListPrefsStore } from '~/lib/store/use-conversation-list-prefs';
 
 function formatTimeAgo(date: Date): string {
   const now = Date.now();
@@ -140,13 +141,16 @@ export function SidebarConversationHistory({
     prevSidebarStateRef.current = sidebarState;
   }, [sidebarState]);
 
-  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('bookmarked-conversations');
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    }
-    return new Set();
-  });
+  const {
+    bookmarkedIds,
+    selectionOrder,
+    toggleBookmark: storeToggleBookmark,
+    touchSelectionOrder,
+  } = useConversationListPrefsStore();
+  const bookmarkedIdsSet = useMemo(
+    () => new Set(bookmarkedIds),
+    [bookmarkedIds],
+  );
   const editInputRef = useRef<HTMLInputElement>(null);
   const previousTitlesRef = useRef<Map<string, string>>(new Map());
   const justEnteredEditModeRef = useRef(false);
@@ -155,62 +159,9 @@ export function SidebarConversationHistory({
     string | null
   >(null);
 
-  const [selectionOrderMap, setSelectionOrderMap] = useState<
-    Map<string, number>
-  >(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('conversation-selection-order');
-        if (stored) {
-          const data = JSON.parse(stored);
-          if (Array.isArray(data)) {
-            const map = new Map<string, number>();
-            data.forEach((id: string, index: number) => {
-              map.set(id, Date.now() - index * 1000);
-            });
-            return map;
-          } else if (typeof data === 'object' && data !== null) {
-            return new Map(Object.entries(data));
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load selection order:', error);
-      }
-    }
-    return new Map<string, number>();
-  });
-
-  // Update selection order when current conversation changes
   useEffect(() => {
-    if (currentConversationId && typeof window !== 'undefined') {
-      setTimeout(() => {
-        setSelectionOrderMap((prev) => {
-          const newMap = new Map(prev);
-          newMap.set(currentConversationId, Date.now());
-
-          if (newMap.size > 100) {
-            const entries = Array.from(newMap.entries())
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 100);
-            newMap.clear();
-            entries.forEach(([id, timestamp]) => newMap.set(id, timestamp));
-          }
-
-          try {
-            const serializable = Object.fromEntries(newMap);
-            localStorage.setItem(
-              'conversation-selection-order',
-              JSON.stringify(serializable),
-            );
-          } catch (error) {
-            console.error('Failed to save selection order:', error);
-          }
-
-          return newMap;
-        });
-      }, 0);
-    }
-  }, [currentConversationId]);
+    if (currentConversationId) touchSelectionOrder(currentConversationId);
+  }, [currentConversationId, touchSelectionOrder]);
 
   // Filter conversations by search query and sort by bookmarked first, then createdAt (newest first)
   const filteredConversations = useMemo(() => {
@@ -223,13 +174,13 @@ export function SidebarConversationHistory({
     }
     // Sort: bookmarked first, then by createdAt (newest first)
     return [...filtered].sort((a, b) => {
-      const aBookmarked = bookmarkedIds.has(a.id);
-      const bBookmarked = bookmarkedIds.has(b.id);
+      const aBookmarked = bookmarkedIdsSet.has(a.id);
+      const bBookmarked = bookmarkedIdsSet.has(b.id);
       if (aBookmarked && !bBookmarked) return -1;
       if (!aBookmarked && bBookmarked) return 1;
       return b.createdAt.getTime() - a.createdAt.getTime();
     });
-  }, [conversations, searchQuery, bookmarkedIds]);
+  }, [conversations, searchQuery, bookmarkedIdsSet]);
 
   // Get current conversation separately using URL slug for reliable matching
   const currentConversation = useMemo(() => {
@@ -239,22 +190,22 @@ export function SidebarConversationHistory({
     );
   }, [filteredConversations, currentSlugFromUrl]);
 
-  // Separate pinned and unpinned conversations
+  // Separate pinned and unpinned conversations (include current in pinned if pinned)
   const {
     pinnedConversations,
     unpinnedConversations,
     currentConversationIsPinned,
   } = useMemo(() => {
     const currentIsPinned = currentConversation
-      ? bookmarkedIds.has(currentConversation.id)
+      ? bookmarkedIdsSet.has(currentConversation.id)
       : false;
 
     const others = currentIsPinned
       ? filteredConversations
       : filteredConversations.filter((c) => c.slug !== currentSlugFromUrl);
 
-    const pinned = others.filter((c) => bookmarkedIds.has(c.id));
-    const unpinned = others.filter((c) => !bookmarkedIds.has(c.id));
+    const pinned = others.filter((c) => bookmarkedIdsSet.has(c.id));
+    const unpinned = others.filter((c) => !bookmarkedIdsSet.has(c.id));
 
     const sortPinned = (group: typeof others) => {
       return group.sort((a, b) => {
@@ -263,8 +214,8 @@ export function SidebarConversationHistory({
         if (aIsCurrent && !bIsCurrent) return -1;
         if (!aIsCurrent && bIsCurrent) return 1;
 
-        const aTimestamp = selectionOrderMap.get(a.id);
-        const bTimestamp = selectionOrderMap.get(b.id);
+        const aTimestamp = selectionOrder[a.id];
+        const bTimestamp = selectionOrder[b.id];
 
         if (aTimestamp !== undefined && bTimestamp !== undefined) {
           return bTimestamp - aTimestamp;
@@ -278,8 +229,8 @@ export function SidebarConversationHistory({
 
     const sortUnpinned = (group: typeof others) => {
       return group.sort((a, b) => {
-        const aTimestamp = selectionOrderMap.get(a.id);
-        const bTimestamp = selectionOrderMap.get(b.id);
+        const aTimestamp = selectionOrder[a.id];
+        const bTimestamp = selectionOrder[b.id];
 
         if (aTimestamp !== undefined && bTimestamp !== undefined) {
           return bTimestamp - aTimestamp;
@@ -299,8 +250,8 @@ export function SidebarConversationHistory({
   }, [
     filteredConversations,
     currentSlugFromUrl,
-    selectionOrderMap,
-    bookmarkedIds,
+    selectionOrder,
+    bookmarkedIdsSet,
     currentConversation,
   ]);
 
@@ -370,17 +321,7 @@ export function SidebarConversationHistory({
   };
 
   const handleBookmark = (conversationId: string) => {
-    const newBookmarkedIds = new Set(bookmarkedIds);
-    if (newBookmarkedIds.has(conversationId)) {
-      newBookmarkedIds.delete(conversationId);
-    } else {
-      newBookmarkedIds.add(conversationId);
-    }
-    setBookmarkedIds(newBookmarkedIds);
-    localStorage.setItem(
-      'bookmarked-conversations',
-      JSON.stringify(Array.from(newBookmarkedIds)),
-    );
+    storeToggleBookmark(conversationId);
     onConversationBookmark?.(conversationId);
   };
 
@@ -575,7 +516,9 @@ export function SidebarConversationHistory({
                                       </div>
                                     ) : (
                                       <>
-                                        {bookmarkedIds.has(conversation.id) && (
+                                        {bookmarkedIdsSet.has(
+                                          conversation.id,
+                                        ) && (
                                           <Pin className="size-3 shrink-0 fill-current text-[#ffcb51]" />
                                         )}
                                         <span
@@ -630,12 +573,12 @@ export function SidebarConversationHistory({
                                                 <Bookmark
                                                   className={cn(
                                                     'mr-2 size-4',
-                                                    bookmarkedIds.has(
+                                                    bookmarkedIdsSet.has(
                                                       conversation.id,
                                                     ) && 'fill-current',
                                                   )}
                                                 />
-                                                {bookmarkedIds.has(
+                                                {bookmarkedIdsSet.has(
                                                   conversation.id,
                                                 ) ? (
                                                   <Trans i18nKey="common:sidebar.unpin" />
@@ -783,7 +726,7 @@ export function SidebarConversationHistory({
                                     </div>
                                   ) : (
                                     <>
-                                      {bookmarkedIds.has(
+                                      {bookmarkedIdsSet.has(
                                         currentConversation.id,
                                       ) && (
                                         <Pin className="size-3 shrink-0 fill-current text-[#ffcb51]" />
@@ -851,12 +794,12 @@ export function SidebarConversationHistory({
                                               <Bookmark
                                                 className={cn(
                                                   'mr-2 size-4',
-                                                  bookmarkedIds.has(
+                                                  bookmarkedIdsSet.has(
                                                     currentConversation.id,
                                                   ) && 'fill-current',
                                                 )}
                                               />
-                                              {bookmarkedIds.has(
+                                              {bookmarkedIdsSet.has(
                                                 currentConversation.id,
                                               ) ? (
                                                 <Trans i18nKey="common:sidebar.unpin" />
@@ -1017,7 +960,9 @@ export function SidebarConversationHistory({
                                       </div>
                                     ) : (
                                       <>
-                                        {bookmarkedIds.has(conversation.id) && (
+                                        {bookmarkedIdsSet.has(
+                                          conversation.id,
+                                        ) && (
                                           <Pin className="size-3 shrink-0 fill-current text-[#ffcb51]" />
                                         )}
                                         <span
@@ -1079,12 +1024,12 @@ export function SidebarConversationHistory({
                                                 <Bookmark
                                                   className={cn(
                                                     'mr-2 size-4',
-                                                    bookmarkedIds.has(
+                                                    bookmarkedIdsSet.has(
                                                       conversation.id,
                                                     ) && 'fill-current',
                                                   )}
                                                 />
-                                                {bookmarkedIds.has(
+                                                {bookmarkedIdsSet.has(
                                                   conversation.id,
                                                 ) ? (
                                                   <Trans i18nKey="common:sidebar.unpin" />

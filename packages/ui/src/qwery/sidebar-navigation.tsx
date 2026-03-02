@@ -23,8 +23,9 @@ import { If } from './if';
 import { cn, isRouteActive } from '../lib/utils';
 import { Trans } from './trans';
 import { ChevronDown } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSidebarNavStore } from '../hooks/use-sidebar-nav';
 
 type CollapsibleOverride = {
   collapsible?: boolean;
@@ -126,40 +127,8 @@ export function SidebarNavigation({
     [t],
   );
 
-  const [persistedState, setPersistedState] = useState<Record<string, boolean>>(
-    {},
-  );
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    try {
-      const raw = window.localStorage.getItem('sidebar:collapsible-state');
-      const parsed = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
-      // Use setTimeout to avoid synchronous setState in effect
-      setTimeout(() => setPersistedState(parsed), 0);
-    } catch {
-      setTimeout(() => setPersistedState({}), 0);
-    }
-  }, []);
-
-  const persistState = useCallback((label: string, open: boolean) => {
-    setPersistedState((prev) => {
-      const next = { ...prev, [label]: open };
-      if (typeof window !== 'undefined') {
-        try {
-          window.localStorage.setItem(
-            'sidebar:collapsible-state',
-            JSON.stringify(next),
-          );
-        } catch {
-          // Ignore storage failures
-        }
-      }
-      return next;
-    });
-  }, []);
+  const { groupOpen: persistedState, setGroupOpen: persistState } =
+    useSidebarNavStore();
 
   return (
     <>

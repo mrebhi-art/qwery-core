@@ -1438,9 +1438,9 @@ export function ToolPart({
                         isCurrent && 'bg-primary/[0.03] border-primary/20',
                       )}
                     >
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
                         <CodeBlock
-                          code={(queryText?.split('\n')[0] ?? '').trim()}
+                          code={(queryText ?? '').replace(/\s+/g, ' ').trim()}
                           language="sql"
                           disableHover={true}
                           className="border-none !bg-transparent bg-transparent p-0"
@@ -1995,6 +1995,24 @@ export function ToolPart({
     part.type !== 'tool-runQueries';
 
   const isControlled = open !== undefined;
+
+  // Minimal mode: avoid nested collapsibles for batch query runs.
+  // ToolCallsGroup already collapses the section; this keeps runQueries simple.
+  if (variant === 'minimal' && part.type === 'tool-runQueries') {
+    return (
+      <div
+        key={`${messageId}-${index}`}
+        className={cn(
+          'animate-in fade-in slide-in-from-bottom-2 duration-300 ease-in-out',
+          'max-w-[min(43.2rem,calc(100%-3rem))]',
+          'mx-4 sm:mx-6',
+        )}
+      >
+        {renderToolOutput()}
+      </div>
+    );
+  }
+
   return (
     <Tool
       key={`${messageId}-${index}`}

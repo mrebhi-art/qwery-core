@@ -17,8 +17,10 @@ function SidebarLayout(props: Route.ComponentProps & React.PropsWithChildren) {
   return (
     <Page>
       <div className="flex h-full flex-col">
-        <div className="bg-background px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
-          <OrgBreadcrumb />
+        <div className="px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
+          <div className="w-fit">
+            <OrgBreadcrumb />
+          </div>
         </div>
         <div className="flex-1 overflow-hidden">{props.children}</div>
       </div>

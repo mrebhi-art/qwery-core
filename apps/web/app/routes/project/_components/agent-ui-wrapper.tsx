@@ -127,6 +127,7 @@ export interface SidebarControl {
 
 export interface AgentUIWrapperProps {
   conversationSlug: string;
+  conversationTitle?: string;
   initialMessages?: MessageOutput[];
   isMessagesLoading?: boolean;
   initialSuggestions?: string[];
@@ -201,6 +202,7 @@ export const AgentUIWrapper = forwardRef<
 >(function AgentUIWrapper(
   {
     conversationSlug,
+    conversationTitle,
     initialMessages,
     isMessagesLoading = false,
     initialSuggestions: _initialSuggestions,
@@ -772,6 +774,7 @@ export const AgentUIWrapper = forwardRef<
         notebookContext={notebookContext}
         isLoading={isLoading}
         conversationSlug={conversationSlug}
+        conversationTitle={conversationTitle ?? conversation?.title}
       />
       <NoDatasourceDialog ref={noDatasourceDialogRef} />
     </>

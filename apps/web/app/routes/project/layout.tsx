@@ -209,7 +209,7 @@ function SidebarLayoutInner(
               </AgentSidebar>
             )}
             <div className="flex h-full flex-col">
-              <div className="bg-background px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
+              <div className="bg-background w-fit px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
                 <ProjectBreadcrumb />
               </div>
               <div className="flex-1 overflow-hidden">{props.children}</div>
@@ -266,7 +266,7 @@ function SimpleModeSidebarLayout(
               />
             </AgentSidebar>
             <div className="flex h-full flex-col">
-              <div className="bg-background px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
+              <div className="bg-background w-fit px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
                 <ProjectBreadcrumb />
               </div>
               <div className="flex-1 overflow-hidden">{props.children}</div>

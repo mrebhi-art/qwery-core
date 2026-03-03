@@ -196,11 +196,13 @@ function MessageItemComponent({
 
   const handleExportResponse = () => {
     const messageIndex = messages.findIndex((m) => m.id === message.id);
-    const userMessage =
-      messageIndex > 0 && messages[messageIndex - 1]?.role === 'user'
-        ? messages[messageIndex - 1]
-        : null;
-
+    let userMessage: (typeof messages)[0] | null = null;
+    for (let i = messageIndex - 1; i >= 0; i--) {
+      if (normalizeUIRole(messages[i]?.role) === 'user') {
+        userMessage = messages[i] ?? null;
+        break;
+      }
+    }
     const messagesToExport = userMessage ? [userMessage, message] : [message];
 
     const md = messagesToMarkdown(messagesToExport, undefined, { getChartSvg });
@@ -719,11 +721,18 @@ function MessageItemComponent({
                                     )}
                                   </>
                                 )}
-                                {/* Actions below the bubble - only for assistant messages, visible on hover */}
-                                {isResponseComplete &&
-                                  message.role === 'assistant' && (
-                                    <div className="mt-1 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                                      {statusConfig.showRegenerateButton &&
+                                {/* Actions below the bubble - for every assistant message */}
+                                {message.role === 'assistant' &&
+                                  isLastTextPart && (
+                                    <div
+                                      className={cn(
+                                        'text-muted-foreground mt-1 flex items-center gap-2',
+                                        !isLastAssistantMessage &&
+                                          'opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100',
+                                      )}
+                                    >
+                                      {isResponseComplete &&
+                                        statusConfig.showRegenerateButton &&
                                         !(
                                           isLastAssistantMessage &&
                                           statusConfig.hideRegenerateOnLastMessage
@@ -872,10 +881,16 @@ function MessageItemComponent({
                             </MessageContent>
                           </Message>
                         )}
-                        {/* Actions below the bubble - visible on hover */}
-                        {isResponseComplete && (
-                          <div className="mt-1 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                            {message.role === 'assistant' &&
+                        {/* Actions below the bubble - for every assistant message */}
+                        {message.role === 'assistant' && isLastTextPart && (
+                          <div
+                            className={cn(
+                              'text-muted-foreground mt-1 flex items-center gap-2',
+                              !isLastAssistantMessage &&
+                                'opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100',
+                            )}
+                          >
+                            {isResponseComplete &&
                               statusConfig.showRegenerateButton &&
                               !(
                                 isLastAssistantMessage &&
@@ -931,6 +946,36 @@ function MessageItemComponent({
                                 <CopyIcon className="size-3" />
                               )}
                             </Button>
+                            {message.role === 'assistant' && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    title="Export"
+                                  >
+                                    <MoreVerticalIcon className="size-3" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={handleExportResponse}
+                                  >
+                                    <FileTextIcon className="mr-2 size-4" />
+                                    {tChat('export_response', {
+                                      defaultValue: 'Export response',
+                                    })}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={handleExportChat}>
+                                    <ArchiveIcon className="mr-2 size-4" />
+                                    {tChat('export_chat', {
+                                      defaultValue: 'Export chat',
+                                    })}
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
                           </div>
                         )}
                       </div>

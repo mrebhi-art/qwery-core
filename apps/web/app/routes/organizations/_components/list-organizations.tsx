@@ -32,7 +32,7 @@ import { Input } from '@qwery/ui/input';
 import { Trans } from '@qwery/ui/trans';
 import { Switch } from '@qwery/ui/switch';
 import { Checkbox } from '@qwery/ui/checkbox';
-import { cn, truncateText } from '@qwery/ui/utils';
+import { cn, truncateText, highlightSearchMatch } from '@qwery/ui/utils';
 import { formatRelativeTime } from '@qwery/ui/ai-utils';
 import {
   DropdownMenu,
@@ -160,20 +160,6 @@ export function ListOrganizations({
 
   const goToPage = (page: number) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-  };
-
-  const highlightMatch = (text: string, query: string) => {
-    if (!query.trim()) return text;
-    const regex = new RegExp(`(${query})`, 'gi');
-    return text.split(regex).map((part, index) =>
-      part.toLowerCase() === query.toLowerCase() ? (
-        <span key={index} className="bg-[#ffcb51] text-black">
-          {part}
-        </span>
-      ) : (
-        part
-      ),
-    );
   };
 
   const handleSortClick = (criterion: SortCriterion) => {
@@ -608,7 +594,7 @@ export function ListOrganizations({
                                 className="text-sm font-semibold"
                                 title={org.name}
                               >
-                                {highlightMatch(
+                                {highlightSearchMatch(
                                   truncateText(org.name, TABLE_NAME_MAX_LENGTH),
                                   searchQuery,
                                 )}

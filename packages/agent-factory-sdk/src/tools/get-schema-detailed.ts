@@ -5,14 +5,12 @@ import { Repositories } from '@qwery/domain/repositories';
 import {
   createDatasourceSchemaService,
   logSchemaPayloadStats,
-  resolveGetSchemaMode,
 } from './schema/schema-tools.utils';
 
-const DESCRIPTION = `Get datasource schema optimized for NL-to-SQL planning.
-Default mode returns compact schema (schema, table, column, type with minimal keys).
-Set QWERY_GET_SCHEMA_MODE=legacy to return full metadata.`;
+const DESCRIPTION = `Get full datasource schema metadata with all details.
+Use this only when detailed metadata is explicitly needed.`;
 
-export const GetSchemaTool = Tool.define('getSchema', {
+export const GetSchemaDetailedTool = Tool.define('getSchemaDetailed', {
   description: DESCRIPTION,
   parameters: z.object({}),
   async execute(_params, ctx) {
@@ -23,22 +21,14 @@ export const GetSchemaTool = Tool.define('getSchema', {
     };
 
     const datasourceId = attachedDatasources[0] ?? '';
-    const mode = resolveGetSchemaMode();
-
-    logger.debug('[GetSchemaTool] Tool execution:', {
-      datasourceId,
-      attachedDatasources,
-      mode,
-    });
-
     const schemaService = createDatasourceSchemaService(repositories);
     const result = await schemaService.execute({
       datasourceId,
-      mode,
+      mode: 'legacy',
     });
 
     if (!result.success || !result.value) {
-      const message = result.error?.message ?? 'Unable to fetch datasource schema';
+      const message = result.error?.message ?? 'Unable to fetch detailed schema';
       throw new Error(message);
     }
 
@@ -53,14 +43,14 @@ export const GetSchemaTool = Tool.define('getSchema', {
           );
 
     logger.debug(
-      `[GetSchemaTool] Fetched schema for datasource ${datasourceId}: ${allTables} table(s)`,
+      `[GetSchemaDetailedTool] Fetched detailed schema for datasource ${datasourceId}: ${allTables} table(s)`,
     );
 
     const payload = {
       schema: schemaOutput.schema,
     };
 
-    logSchemaPayloadStats(logger, 'GetSchemaTool', payload);
+    logSchemaPayloadStats(logger, 'GetSchemaDetailedTool', payload);
 
     return payload;
   },

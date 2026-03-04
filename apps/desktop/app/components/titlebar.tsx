@@ -5,8 +5,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Info,
-  Minimize,
-  Maximize,
+  Minus,
+  Maximize2,
   X,
   Square,
   Zap,
@@ -16,6 +16,7 @@ import * as Menubar from '@radix-ui/react-menubar';
 import { cn } from '@qwery/ui/utils';
 import type { MenuActionId } from '../hooks/use-menu-actions';
 import type { WorkspaceMode } from '@qwery/ui/workspace-mode-switch';
+import { AppLogo } from '~/components/app-logo';
 import {
   getWorkspaceFromLocalStorage,
   setWorkspaceInLocalStorage,
@@ -176,7 +177,7 @@ export function Titlebar({
     }
   };
 
-  const windowControls = (
+  const otherOptions = (
     <div className="flex items-center gap-1">
       <button
         onClick={() =>
@@ -211,12 +212,17 @@ export function Titlebar({
       >
         <Info className="h-4 w-4" />
       </button>
+    </div>
+  );
+
+  const windowControls = (
+    <div className="flex items-center gap-1 opacity-90">
       <button
         onClick={handleMinimize}
         className="hover:bg-muted flex h-8 w-8 items-center justify-center rounded transition-colors"
         aria-label="Minimize"
       >
-        <Minimize className="h-4 w-4" />
+        <Minus className="h-4 w-4" />
       </button>
       <button
         onClick={handleMaximize}
@@ -226,7 +232,7 @@ export function Titlebar({
         {isMaximized ? (
           <Square className="h-3.5 w-3.5" />
         ) : (
-          <Maximize className="h-4 w-4" />
+          <Maximize2 className="h-4 w-4" />
         )}
       </button>
       <button
@@ -242,43 +248,9 @@ export function Titlebar({
   const hasMenu = Boolean(onMenuAction && isTauriEnv);
 
   const titleBlock = (
-    <div className="flex items-center gap-3">
-      <div className="text-foreground text-sm font-semibold">Qwery</div>
-      {isTauriEnv && (
-        <div
-          data-tauri-drag-region="no-drag"
-          className="flex items-center gap-1"
-        >
-          <button
-            onClick={onBack}
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded transition-colors',
-              canGoBack
-                ? 'hover:bg-muted'
-                : 'cursor-default opacity-40',
-            )}
-            aria-label="Back"
-            type="button"
-            disabled={!canGoBack}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <button
-            onClick={onForward}
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded transition-colors',
-              canGoForward
-                ? 'hover:bg-muted'
-                : 'cursor-default opacity-40',
-            )}
-            aria-label="Forward"
-            type="button"
-            disabled={!canGoForward}
-          >
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+    <div className="flex items-center gap-10">
+      <div className="flex items-center gap-3">
+        <AppLogo className="h-6 w-6" />
       {hasMenu && (
         <Menubar.Root
           data-tauri-drag-region="no-drag"
@@ -364,6 +336,43 @@ export function Titlebar({
 
         </Menubar.Root>
       )}
+      </div>
+      {isTauriEnv && (
+        <div
+          data-tauri-drag-region="no-drag"
+          className="flex items-center gap-1"
+        >
+          <button
+            onClick={onBack}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded transition-colors',
+              canGoBack
+                ? 'hover:bg-muted'
+                : 'cursor-default opacity-40',
+            )}
+            aria-label="Back"
+            type="button"
+            disabled={!canGoBack}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onForward}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded transition-colors',
+              canGoForward
+                ? 'hover:bg-muted'
+                : 'cursor-default opacity-40',
+            )}
+            aria-label="Forward"
+            type="button"
+            disabled={!canGoForward}
+          >
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      
     </div>
   );
 
@@ -384,13 +393,19 @@ export function Titlebar({
     <div data-tauri-drag-region className={titlebarClass}>
       {isDarwin ? (
         <>
-          {windowControls}
-          {titleBlock}
+          <div className="flex items-center gap-4">
+            {windowControls}
+            {otherOptions}
+          </div>
+            {titleBlock}
         </>
       ) : (
         <>
-          {titleBlock}
-          {windowControls}
+          {titleBlock}  
+          <div className="flex items-center gap-4">
+            {otherOptions}
+            {windowControls}
+          </div>
         </>
       )}
     </div>

@@ -28,6 +28,15 @@ export const isDesktopApp = (): boolean =>
   ('__TAURI_INTERNALS__' in window ||
     Boolean((window as Window & { desktop?: DesktopApi }).desktop));
 
+export type Platform = 'web' | 'desktop';
+
+export const platform: Platform =
+  typeof window !== 'undefined' && isDesktopApp() ? 'desktop' : 'web';
+
+export const isDesktop = (): boolean => platform === 'desktop';
+
+export const isWeb = (): boolean => platform === 'web';
+
 declare global {
   interface Window {
     desktop?: DesktopApi;

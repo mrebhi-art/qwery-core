@@ -39,7 +39,7 @@ function PageWithHeaderSidebar(props: PageProps) {
       {/* Topbar */}
       <div
         className={cn(
-          'bg-sidebar dark:border-border relative flex h-14 w-full shrink-0 items-center justify-between overflow-x-hidden border-b px-4',
+          'page-top-bar-container bg-sidebar dark:border-border relative flex h-14 w-full shrink-0 items-center justify-between overflow-x-hidden border-b px-4',
           props.sticky === false
             ? ''
             : 'bg-sidebar sticky top-0 z-[100] backdrop-blur-md',

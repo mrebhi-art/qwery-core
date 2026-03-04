@@ -13,6 +13,7 @@ import { useMenuActions, type MenuActionId } from './hooks/use-menu-actions';
 import { useKeyboardShortcuts } from './hooks/use-keyboard-shortcuts';
 
 import desktopStyles from './styles/desktop.css?url';
+import { isDesktopApp } from '@qwery/shared/desktop';
 
 export const links = () => [
   { rel: 'stylesheet', href: styles },
@@ -109,8 +110,13 @@ function AppContent({
   const [canGoForward, setCanGoForward] = useState(false);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
+    if (!isDesktopApp()) return;
+
     initDesktopApi();
+    if (typeof window !== 'undefined') {
+      document.documentElement.classList.add('desktop-runtime');
+    }
+
     import('@tauri-apps/plugin-os')
       .then(({ platform }) => platform())
       .then((p) => {

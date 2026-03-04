@@ -127,7 +127,7 @@ export function Titlebar({
 
   const isDarwin = platform === 'darwin';
   const titlebarClass = cn(
-    'bg-sidebar border-border relative z-[999] flex h-10 w-full shrink-0 items-center justify-between border-b px-4',
+    'titlebar bg-sidebar border-border relative z-[999] flex h-10 w-full shrink-0 items-center justify-between border-b px-4',
     'select-none',
     platform && `platform-${platform}`,
   );
@@ -185,7 +185,7 @@ export function Titlebar({
             workspaceMode === 'simple' ? 'advanced' : 'simple',
           )
         }
-        className="hover:bg-muted flex h-8 w-8 items-center justify-center rounded transition-colors"
+        className="hover:bg-muted flex h-7 w-7 items-center justify-center rounded transition-colors"
         aria-label={
           workspaceMode === 'simple'
             ? 'Switch to advanced mode'
@@ -199,48 +199,48 @@ export function Titlebar({
         type="button"
       >
         {workspaceMode === 'simple' ? (
-          <Zap className="h-4 w-4" />
+          <Zap className="h-5 w-5" />
         ) : (
-          <Code2 className="h-4 w-4" />
+          <Code2 className="h-5 w-5" />
         )}
       </button>
       <button
         onClick={handleInfoClick}
-        className="hover:bg-muted flex h-8 w-8 items-center justify-center rounded transition-colors"
+        className="hover:bg-muted flex h-7 w-7 items-center justify-center rounded transition-colors"
         aria-label="About Qwery"
         type="button"
       >
-        <Info className="h-4 w-4" />
+        <Info className="h-5 w-5" />
       </button>
     </div>
   );
 
   const windowControls = (
-    <div className="flex items-center gap-1 opacity-90">
+    <div className="flex items-center gap-1 opacity-75">
       <button
         onClick={handleMinimize}
-        className="hover:bg-muted flex h-8 w-8 items-center justify-center rounded transition-colors"
+        className="hover:bg-muted flex h-7 w-7 items-center justify-center rounded transition-colors"
         aria-label="Minimize"
       >
-        <Minus className="h-4 w-4" />
+        <Minus className="h-5 w-5" />
       </button>
       <button
         onClick={handleMaximize}
-        className="hover:bg-muted flex h-8 w-8 items-center justify-center rounded transition-colors"
+        className="hover:bg-muted flex h-7 w-7 items-center justify-center rounded transition-colors"
         aria-label={isMaximized ? 'Restore' : 'Maximize'}
       >
         {isMaximized ? (
-          <Square className="h-3.5 w-3.5" />
+          <Square className="h-5 w-5" />
         ) : (
-          <Maximize2 className="h-4 w-4" />
+          <Maximize2 className="h-5 w-5" />
         )}
       </button>
       <button
         onClick={handleClose}
-        className="hover:bg-destructive hover:text-destructive-foreground flex h-8 w-8 items-center justify-center rounded transition-colors"
+        className="hover:bg-destructive hover:text-destructive-foreground flex h-7 w-7 items-center justify-center rounded transition-colors"
         aria-label="Close"
       >
-        <X className="h-4 w-4" />
+        <X className="h-5 w-5" />
       </button>
     </div>
   );
@@ -250,14 +250,14 @@ export function Titlebar({
   const titleBlock = (
     <div className="flex items-center gap-10">
       <div className="flex items-center gap-3">
-        <AppLogo className="h-6 w-6" />
+        <AppLogo className="h-5 w-5" />
       {hasMenu && (
         <Menubar.Root
           data-tauri-drag-region="no-drag"
           className="flex h-7 items-center gap-1 rounded-md px-1 text-xs"
         >
           <Menubar.Menu>
-            <Menubar.Trigger className="hover:bg-muted/70 data-[state=open]:bg-muted/90 rounded px-2 py-1">
+            <Menubar.Trigger className="titlebar-menu-trigger hover:bg-muted/70 data-[state=open]:bg-muted/90 rounded px-2 py-1">
               File
             </Menubar.Trigger>
             <Menubar.Content className="bg-popover text-popover-foreground z-[1000] min-w-[10rem] overflow-hidden rounded-md border p-1 shadow-md">
@@ -289,7 +289,7 @@ export function Titlebar({
           </Menubar.Menu>
 
           <Menubar.Menu>
-            <Menubar.Trigger className="hover:bg-muted/70 data-[state=open]:bg-muted/90 rounded px-2 py-1">
+            <Menubar.Trigger className="titlebar-menu-trigger hover:bg-muted/70 data-[state=open]:bg-muted/90 rounded px-2 py-1">
               Edit
             </Menubar.Trigger>
             <Menubar.Content className="bg-popover text-popover-foreground z-[1000] min-w-[10rem] overflow-hidden rounded-md border p-1 shadow-md">
@@ -309,7 +309,7 @@ export function Titlebar({
           </Menubar.Menu>
 
           <Menubar.Menu>
-            <Menubar.Trigger className="hover:bg-muted/70 data-[state=open]:bg-muted/90 rounded px-2 py-1">
+            <Menubar.Trigger className="titlebar-menu-trigger hover:bg-muted/70 data-[state=open]:bg-muted/90 rounded px-2 py-1">
               View
             </Menubar.Trigger>
             <Menubar.Content className="bg-popover text-popover-foreground z-[1000] min-w-[10rem] overflow-hidden rounded-md border p-1 shadow-md">
@@ -345,7 +345,7 @@ export function Titlebar({
           <button
             onClick={onBack}
             className={cn(
-              'flex h-8 w-8 items-center justify-center rounded transition-colors',
+              'flex h-7 w-7 items-center justify-center rounded transition-colors',
               canGoBack
                 ? 'hover:bg-muted'
                 : 'cursor-default opacity-40',
@@ -354,12 +354,12 @@ export function Titlebar({
             type="button"
             disabled={!canGoBack}
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-5 w-5" />
           </button>
           <button
             onClick={onForward}
             className={cn(
-              'flex h-8 w-8 items-center justify-center rounded transition-colors',
+              'flex h-7 w-7 items-center justify-center rounded transition-colors',
               canGoForward
                 ? 'hover:bg-muted'
                 : 'cursor-default opacity-40',
@@ -368,7 +368,7 @@ export function Titlebar({
             type="button"
             disabled={!canGoForward}
           >
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="h-5 w-5" />
           </button>
         </div>
       )}
@@ -393,7 +393,7 @@ export function Titlebar({
     <div data-tauri-drag-region className={titlebarClass}>
       {isDarwin ? (
         <>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
             {windowControls}
             {otherOptions}
           </div>
@@ -402,7 +402,7 @@ export function Titlebar({
       ) : (
         <>
           {titleBlock}  
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
             {otherOptions}
             {windowControls}
           </div>

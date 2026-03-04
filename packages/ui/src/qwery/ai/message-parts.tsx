@@ -29,13 +29,15 @@ import { generateExportFilename } from './utils/generate-export-filename';
 
 import type { DatasourceMetadata } from '@qwery/domain/entities';
 import { cn } from '../../lib/utils';
-import { Button } from '../../shadcn/button';
 import {
   SchemaVisualizer,
   type SchemaVisualizerDatasourceItem,
 } from './schema-visualizer';
 import { Trans } from '../trans';
 import { TOOL_UI_CONFIG } from './utils/tool-ui-config';
+import { parseTodosFromPart } from './utils/todo-logic';
+import { toast } from 'sonner';
+import { scrollToTodoDelimiter } from './utils/scroll-utils';
 
 import { ViewSheetVisualizer } from './sheets/view-sheet-visualizer';
 
@@ -46,15 +48,7 @@ import {
   SourcesContent,
   SourcesTrigger,
 } from '../../ai-elements/sources';
-import {
-  useState,
-  createContext,
-  useMemo,
-  useEffect,
-  useRef,
-  memo,
-  Suspense,
-} from 'react';
+import { useState, createContext, useMemo, useEffect, memo } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 function RunQueriesOpenSync({
@@ -526,32 +520,6 @@ function getTodoStatusMeta(
   );
 }
 
-function parseTodosFromPart(
-  part: ToolUIPart & { type: 'tool-todowrite' | 'tool-todoread' },
-): TodoItemUI[] {
-  if (part.type === 'tool-todowrite') {
-    const input = part.input as { todos?: TodoItemUI[] } | null;
-    const todos = input?.todos;
-    return Array.isArray(todos) ? todos : [];
-  }
-  const output = part.output;
-  if (output == null) return [];
-  if (Array.isArray(output)) return output as TodoItemUI[];
-  if (typeof output === 'string') {
-    try {
-      const parsed = JSON.parse(output) as TodoItemUI[] | unknown;
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-  if (typeof output === 'object' && output !== null && 'todos' in output) {
-    const todos = (output as { todos: TodoItemUI[] }).todos;
-    return Array.isArray(todos) ? todos : [];
-  }
-  return [];
-}
-
 function todoPartTitle(
   part: ToolUIPart & { type: 'tool-todowrite' | 'tool-todoread' },
   todos: TodoItemUI[],
@@ -584,9 +552,11 @@ const TodoRow = memo(
   function TodoRow({
     todo,
     variant,
+    messageId,
   }: {
     todo: TodoItemUI;
     variant: ToolVariant;
+    messageId: string;
   }) {
     const meta = getTodoStatusMeta(todo.status);
     const StatusIcon = meta.Icon ?? CircleDashedIcon;
@@ -594,17 +564,46 @@ const TodoRow = memo(
     const isCancelled = todo.status === 'cancelled';
     const isInProgress = todo.status === 'in_progress';
 
+    const handleClick = () => {
+      if (todo.status === 'pending') {
+        toast.info('Task not started yet');
+        return;
+      }
+      if (todo.status === 'cancelled') {
+        toast.info('Task was cancelled');
+        return;
+      }
+      const found = scrollToTodoDelimiter(todo.id, {
+        behavior: 'smooth',
+        block: 'center',
+        scopeMessageId: messageId,
+      });
+      if (!found) {
+        toast.info('Task output not found yet');
+      }
+    };
+
     return (
       <li
+        role="button"
+        tabIndex={0}
+        onClick={handleClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleClick();
+          }
+        }}
         className={cn(
-          'flex items-start gap-3 rounded-lg py-2 transition-all duration-200',
+          'flex cursor-pointer items-center gap-3 rounded-lg py-2 transition-all duration-200',
           variant === 'default' && 'hover:bg-accent/30 -mx-2 px-2',
         )}
         data-status={todo.status}
+        data-todo-task-id={todo.id}
       >
         <div
           className={cn(
-            'mt-0.5 flex shrink-0 items-center justify-center rounded-full p-1.5 shadow-sm transition-colors duration-200',
+            'flex shrink-0 items-center justify-center rounded-full p-1.5 shadow-sm transition-colors duration-200',
             meta.badgeClass,
             variant === 'minimal' ? 'size-5' : 'size-6',
           )}
@@ -643,7 +642,9 @@ const TodoRow = memo(
     );
   },
   (prev, next) =>
-    prev.variant === next.variant && sameTodo(prev.todo, next.todo),
+    prev.variant === next.variant &&
+    prev.messageId === next.messageId &&
+    sameTodo(prev.todo, next.todo),
 );
 
 export type TodoPartProps = {
@@ -652,31 +653,61 @@ export type TodoPartProps = {
   index: number;
 };
 
-export function TodoPart({ part, messageId, index }: TodoPartProps) {
+export function TodoPart({ part, messageId, index: _index }: TodoPartProps) {
   const { variant } = useToolVariant();
   const newTodos = parseTodosFromPart(part);
-  const prevStableRef = useRef<TodoItemUI[]>([]);
+  const [prevStable, setPrevStable] = useState<TodoItemUI[]>([]);
 
   const stableTodos = useMemo(() => {
-    const prevById = new Map(
-      prevStableRef.current.map((t) => [t.id, t] as const),
-    );
-    const stable = newTodos.map((newT) => {
+    const prev = prevStable;
+    const prevById = new Map(prev.map((t) => [t.id, t] as const));
+
+    let effectiveTodos: TodoItemUI[];
+    if (
+      part.state === 'input-streaming' &&
+      newTodos.length < prev.length &&
+      prev.length > 0
+    ) {
+      effectiveTodos = prev.map((p) => {
+        const n = newTodos.find((t) => t.id === p.id);
+        return n ? (sameTodo(p, n) ? p : n) : p;
+      });
+      const prevIds = new Set(prev.map((t) => t.id));
+      for (const n of newTodos) {
+        if (!prevIds.has(n.id)) effectiveTodos.push(n);
+      }
+    } else {
+      effectiveTodos = newTodos;
+    }
+
+    if (
+      effectiveTodos.length === prev.length &&
+      effectiveTodos.every(
+        (n, i) => prev[i] && n.id === prev[i]!.id && sameTodo(prev[i]!, n),
+      )
+    ) {
+      return prev;
+    }
+
+    const stable = effectiveTodos.map((newT) => {
       const p = prevById.get(newT.id);
       if (p && sameTodo(p, newT)) return p;
       return newT;
     });
-    prevStableRef.current = stable;
     return stable;
-  }, [newTodos]);
+  }, [newTodos, part.state, prevStable]);
 
-  const title = todoPartTitle(part, newTodos);
-  const subtitle = todoPartSubtitle(newTodos);
+  useEffect(() => {
+    setPrevStable(stableTodos);
+  }, [stableTodos]);
+
+  const title = todoPartTitle(part, stableTodos);
+  const subtitle = todoPartSubtitle(stableTodos);
   const displayTitle = subtitle ?? title;
 
   return (
     <Tool
-      key={`${messageId}-todo-${index}`}
+      key={`${messageId}-todo`}
       state={part.state}
       variant={variant}
       defaultOpen={true}
@@ -701,7 +732,12 @@ export function TodoPart({ part, messageId, index }: TodoPartProps) {
           ) : (
             <ul className="flex flex-col gap-1.5" data-component="todos">
               {stableTodos.map((todo) => (
-                <TodoRow key={todo.id} todo={todo} variant={variant} />
+                <TodoRow
+                  key={todo.id}
+                  todo={todo}
+                  variant={variant}
+                  messageId={messageId}
+                />
               ))}
             </ul>
           )}
@@ -1276,7 +1312,7 @@ export function ToolPart({
 
       const totalQueries = runQueriesInput?.queries?.length ?? 0;
       const results = runQueriesOutput?.results ?? [];
-      const completedCount = results.length;
+      const hasBatchOutput = Boolean(runQueriesOutput);
       const isComplete =
         part.state === 'output-available' || part.state === 'output-error';
       const isInProgress = !isComplete && totalQueries > 0;
@@ -1315,16 +1351,26 @@ export function ToolPart({
         };
       });
 
-      const _distinctCount = keyToBaseIndex.size || results.length;
-      const total = runQueriesOutput?.meta?.total ?? totalQueries;
+      const distinctCompletedCount = keyToBaseIndex.size || results.length || 0;
+      const meta = runQueriesOutput?.meta;
+      const total =
+        (meta && typeof meta.total === 'number' && meta.total > 0
+          ? meta.total
+          : distinctCompletedCount || totalQueries) || 0;
       const succeeded =
-        runQueriesOutput?.meta?.succeeded ??
-        results.filter((r) => r.success).length;
+        (meta && typeof meta.succeeded === 'number'
+          ? meta.succeeded
+          : results.filter((r) => r.success).length) || 0;
       const failed =
-        runQueriesOutput?.meta?.failed ??
-        (isComplete
-          ? total - succeeded
-          : results.filter((r) => !r.success && r.error).length);
+        (meta && typeof meta.failed === 'number'
+          ? meta.failed
+          : isComplete
+            ? Math.max(total - succeeded, 0)
+            : results.filter((r) => !r.success && r.error).length) || 0;
+      const completedCount = Math.min(
+        total,
+        succeeded + failed || distinctCompletedCount,
+      );
       const _durationMs = (
         runQueriesOutput?.meta as { durationMs?: number } | undefined
       )?.durationMs;
@@ -1398,7 +1444,7 @@ export function ToolPart({
             <div className="bg-primary/10 text-primary animate-in fade-in zoom-in flex items-center gap-1.5 rounded-full px-2 py-0.5 duration-300">
               <CircleDashedIcon className="h-3 w-3 animate-spin" />
               <span className="text-[10px] font-bold tracking-wider uppercase">
-                {completedCount}/{total}
+                {completedCount}/{total || totalQueries || completedCount || 0}
               </span>
             </div>
           )}
@@ -1447,33 +1493,117 @@ export function ToolPart({
                     ) as string | undefined;
                     const success = 'success' in q ? q.success : undefined;
                     const isCurrent = isInProgress && idx === completedCount;
+                    const summary =
+                      'summary' in q && typeof q.summary === 'string'
+                        ? q.summary
+                        : undefined;
+                    const compactLabel =
+                      summary && summary.trim().length > 0
+                        ? summary.trim()
+                        : (queryText?.split('\n')[0] ?? '').trim();
+                    const result =
+                      'data' in q &&
+                      q.data &&
+                      typeof q.data === 'object' &&
+                      'result' in q.data
+                        ? (q.data as { result?: unknown }).result
+                        : undefined;
+                    const hasTableData =
+                      result &&
+                      typeof result === 'object' &&
+                      'columns' in result &&
+                      'rows' in result &&
+                      Array.isArray(result.columns) &&
+                      Array.isArray(result.rows);
+                    const tableResult =
+                      hasTableData && result
+                        ? {
+                            columns: (result as { columns: unknown[] })
+                              .columns as string[],
+                            rows: (result as { rows: unknown[] }).rows as Array<
+                              Record<string, unknown>
+                            >,
+                          }
+                        : null;
+                    const error =
+                      'error' in q && q.error
+                        ? typeof (q as Record<string, unknown>).error ===
+                          'string'
+                          ? ((q as Record<string, unknown>).error as string)
+                          : String((q as Record<string, unknown>).error)
+                        : undefined;
+                    const isOpen = openQueries.has(idx);
 
                     return (
-                      <div
+                      <Collapsible
                         key={idx}
+                        open={isOpen}
+                        onOpenChange={(open) => {
+                          setOpenQueries((prev) =>
+                            open ? new Set([idx]) : new Set(),
+                          );
+                        }}
                         className={cn(
-                          'border-border/10 flex items-center gap-2 rounded-md border px-2 py-0.5 transition-colors',
-                          isCurrent && 'bg-primary/[0.03] border-primary/20',
+                          'group border-border/50 overflow-hidden rounded-md border transition-colors',
+                          isCurrent && 'bg-primary/[0.03] border-primary/40',
                         )}
                       >
-                        <div className="min-w-0 flex-1">
-                          <CodeBlock
-                            code={(queryText?.split('\n')[0] ?? '').trim()}
-                            language="sql"
-                            disableHover={true}
-                            className="border-none !bg-transparent bg-transparent p-0"
+                        <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-2 px-2 py-0.5 text-left">
+                          <div className="scrollbar-hover-visible min-w-0 flex-1 overflow-x-auto">
+                            {hasBatchOutput ? (
+                              <CodeBlock
+                                code={(queryText?.split('\n')[0] ?? '').trim()}
+                                language="sql"
+                                disableHover={true}
+                                noInternalScroll
+                                preClassName="[&>pre]:!bg-[#1d1d1c]"
+                                className="w-max min-w-0 !overflow-visible border-none !bg-[#1d1d1c] p-0"
+                              />
+                            ) : (
+                              <span className="text-muted-foreground text-[11px] whitespace-nowrap">
+                                {compactLabel}
+                              </span>
+                            )}
+                          </div>
+                          {success === true && (
+                            <CheckCircle2Icon className="h-2.5 w-2.5 shrink-0 text-emerald-500/80" />
+                          )}
+                          {success === false && (
+                            <XCircleIcon className="text-destructive/80 h-2.5 w-2.5 shrink-0" />
+                          )}
+                          {isCurrent && (
+                            <CircleDashedIcon className="text-primary/80 h-2.5 w-2.5 shrink-0 animate-spin" />
+                          )}
+                          <ChevronDownIcon
+                            className={cn(
+                              'h-3 w-3 shrink-0 transition-transform',
+                              isOpen && 'rotate-180',
+                            )}
                           />
-                        </div>
-                        {success === true && (
-                          <CheckCircle2Icon className="h-2.5 w-2.5 text-emerald-500/80" />
-                        )}
-                        {success === false && (
-                          <XCircleIcon className="text-destructive/80 h-2.5 w-2.5" />
-                        )}
-                        {isCurrent && (
-                          <CircleDashedIcon className="text-primary/80 h-2.5 w-2.5 animate-spin" />
-                        )}
-                      </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="border-border/10 space-y-2 border-t px-2 py-2">
+                            <SQLQueryVisualizer
+                              query={queryText ?? ''}
+                              result={
+                                tableResult
+                                  ? { result: tableResult }
+                                  : undefined
+                              }
+                              showPasteButton={false}
+                            />
+                            {error && (
+                              <ToolErrorVisualizer
+                                errorText={
+                                  typeof error === 'string'
+                                    ? error
+                                    : String(error)
+                                }
+                              />
+                            )}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
                     );
                   },
                 )}
@@ -1569,17 +1699,6 @@ export function ToolPart({
                         : String((q as Record<string, unknown>).error)
                       : undefined;
                   const rawId = (q as { id?: string }).id;
-                  const rawSummary = (q as { summary?: string }).summary;
-                  const genAISummary =
-                    typeof rawSummary === 'string' &&
-                    rawSummary.trim().length > 0
-                      ? rawSummary.trim()
-                      : undefined;
-                  const fallbackLabel =
-                    typeof rawId === 'string' && rawId.trim().length > 0
-                      ? rawId.trim()
-                      : `Query ${idx + 1}`;
-                  const displayLabel = genAISummary ?? fallbackLabel;
                   const fullTable = tableFromQuery(queryText);
                   const tableLabel = tableFocusedLabel(
                     queryText,
@@ -1671,7 +1790,7 @@ export function ToolPart({
                               </div>
                             )}
                           </div>
-                          <div className="flex min-w-0 flex-1 flex-col">
+                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                             {isLoading && !isOpen ? (
                               <div className="space-y-1.5">
                                 <div className="bg-muted/60 h-3 w-24 animate-pulse rounded" />
@@ -1679,9 +1798,22 @@ export function ToolPart({
                               </div>
                             ) : (
                               <>
-                                <span className="mb-1 truncate text-xs leading-none font-bold">
-                                  {displayLabel}
-                                </span>
+                                {queryText && (
+                                  <div
+                                    className="min-w-0 flex-1 overflow-hidden"
+                                    title={queryText}
+                                  >
+                                    <CodeBlock
+                                      code={(
+                                        queryText.split('\n')[0] ?? ''
+                                      ).trim()}
+                                      language="sql"
+                                      disableHover={true}
+                                      preClassName="[&>pre]:!bg-[#1d1d1c]"
+                                      className="border-none !bg-[#1d1d1c] p-0 text-[10px] [&_pre]:!truncate [&_pre]:!py-1.5 [&_pre]:!text-[10px]"
+                                    />
+                                  </div>
+                                )}
                                 {meta.isDuplicate && (
                                   <span className="text-muted-foreground text-[10px] font-medium opacity-70">
                                     Retry #{meta.attemptIndex}
@@ -1735,6 +1867,14 @@ export function ToolPart({
                                 <p className="text-muted-foreground pl-1 text-[10px] font-bold tracking-widest uppercase">
                                   SQL Query
                                 </p>
+                                <SQLQueryVisualizer
+                                  query={queryText ?? ''}
+                                  result={undefined}
+                                  onPasteToNotebook={undefined}
+                                  showPasteButton={false}
+                                  chartExecutionOverride={false}
+                                  isStreaming={!isComplete}
+                                />
                                 <TableResultsSkeleton />
                               </div>
                             </div>

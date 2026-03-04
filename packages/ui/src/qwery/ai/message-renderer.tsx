@@ -7,12 +7,12 @@ import {
   TaskPart,
   TextPart,
   ReasoningPart,
-  ToolPart,
   TodoPart,
   SourcesPart,
   TaskUIPart,
   getExecutionTimeMsFromMessageParts,
 } from './message-parts';
+import { ToolWithTaskDelimiter } from './tool-with-task-delimiter';
 import { ToolUIPart as AIToolUIPart } from 'ai';
 import { getLastTodoPartIndex } from './utils/todo-parts';
 
@@ -75,7 +75,7 @@ function MessageRendererComponent({
   const lastTodoIndex = getLastTodoPartIndex(message.parts);
 
   return (
-    <div key={message.id}>
+    <div key={message.id} data-message-id={message.id}>
       {hasSources && <SourcesPart parts={sourceParts} messageId={message.id} />}
       {lastTodoIndex !== null && (
         <TodoPart
@@ -144,8 +144,10 @@ function MessageRendererComponent({
             if (part.type.startsWith('tool-')) {
               const toolPart = part as AIToolUIPart;
               return (
-                <ToolPart
+                <ToolWithTaskDelimiter
                   key={`${message.id}-${i}`}
+                  parts={message.parts}
+                  partIndex={i}
                   part={toolPart}
                   messageId={message.id}
                   index={i}

@@ -32,11 +32,8 @@ import {
 import { DatasourceBadges, type DatasourceItem } from './datasource-badge';
 import { DatasourceSelector } from './datasource-selector';
 import { ToolUIPart } from 'ai';
-import {
-  ToolPart,
-  TodoPart,
-  getExecutionTimeMsFromMessageParts,
-} from './message-parts';
+import { TodoPart, getExecutionTimeMsFromMessageParts } from './message-parts';
+import { ToolWithTaskDelimiter } from './tool-with-task-delimiter';
 import { getLastTodoPartIndex } from './utils/todo-parts';
 import {
   isChatStreaming,
@@ -379,6 +376,12 @@ function MessageItemComponent({
                         return undefined;
                       })();
 
+                      const lastUserMessage = [...messages]
+                        .reverse()
+                        .find((msg) => normalizeUIRole(msg.role) === 'user');
+                      const isLastUserMessage =
+                        lastUserMessage?.id === message.id;
+
                       return (
                         <div
                           key={`${message.id}-${i}`}
@@ -494,7 +497,7 @@ function MessageItemComponent({
 
                                     if (context) {
                                       return (
-                                        <div className="group w-full max-w-full min-w-0">
+                                        <div className="group/msg w-full max-w-full min-w-0">
                                           <UserMessageBubble
                                             key={`${message.id}-${i}`}
                                             text={text}
@@ -502,7 +505,21 @@ function MessageItemComponent({
                                             messageId={message.id}
                                             messages={messages}
                                             datasources={messageDatasources}
+                                            allDatasources={datasources}
                                             pluginLogoMap={pluginLogoMap}
+                                            onEditStart={
+                                              datasources && pluginLogoMap
+                                                ? (txt, ids) =>
+                                                    onEditStart(
+                                                      message.id,
+                                                      txt,
+                                                      ids,
+                                                    )
+                                                : undefined
+                                            }
+                                            isLastUserMessage={
+                                              isLastUserMessage
+                                            }
                                           />
                                           {isLastTextPart && (
                                             <div className="mt-1 flex items-center justify-end gap-1">
@@ -519,7 +536,7 @@ function MessageItemComponent({
                                                       ) ?? [],
                                                     )
                                                   }
-                                                  className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
+                                                  className="h-7 w-7 opacity-0 transition-opacity group-hover/msg:opacity-100"
                                                   title={t('sidebar.edit')}
                                                 >
                                                   <PencilIcon className="size-3" />
@@ -545,7 +562,7 @@ function MessageItemComponent({
                                                     );
                                                   }
                                                 }}
-                                                className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
+                                                className="h-7 w-7 opacity-0 transition-opacity group-hover/msg:opacity-100"
                                                 title={
                                                   copiedMessagePartId ===
                                                   `${message.id}-${i}`
@@ -567,17 +584,24 @@ function MessageItemComponent({
                                     }
 
                                     return (
-                                      <div className="flex flex-col items-end gap-1.5">
+                                      <div className="group/msg flex flex-col items-end gap-1.5">
                                         {messageDatasources &&
                                           messageDatasources.length > 0 && (
-                                            <div className="flex w-full max-w-[80%] min-w-0 justify-end overflow-x-hidden">
+                                            <div
+                                              className={cn(
+                                                'flex min-h-6 w-full max-w-[80%] min-w-0 justify-end overflow-x-hidden transition-opacity',
+                                                isLastUserMessage
+                                                  ? 'opacity-100'
+                                                  : 'opacity-0 group-hover/msg:opacity-100',
+                                              )}
+                                            >
                                               <DatasourceBadges
                                                 datasources={messageDatasources}
                                                 pluginLogoMap={pluginLogoMap}
                                               />
                                             </div>
                                           )}
-                                        <div className="group w-full max-w-full min-w-0">
+                                        <div className="w-full max-w-full min-w-0">
                                           <Message
                                             key={`${message.id}-${i}`}
                                             from={message.role}
@@ -607,7 +631,7 @@ function MessageItemComponent({
                                                         ) ?? [],
                                                       )
                                                     }
-                                                    className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
+                                                    className="h-7 w-7 opacity-0 transition-opacity group-hover/msg:opacity-100"
                                                     title={t('sidebar.edit')}
                                                   >
                                                     <PencilIcon className="size-3" />
@@ -633,7 +657,7 @@ function MessageItemComponent({
                                                       );
                                                     }
                                                   }}
-                                                  className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
+                                                  className="h-7 w-7 opacity-0 transition-opacity group-hover/msg:opacity-100"
                                                   title={
                                                     copiedMessagePartId ===
                                                     `${message.id}-${i}`
@@ -946,85 +970,42 @@ function MessageItemComponent({
                         selectedDatasources,
                       );
 
-                      if (isToolInProgress) {
-                        return (
-                          <div
-                            key={toolPartKey}
-                            className="flex w-full max-w-full min-w-0 flex-col justify-start gap-2 overflow-x-hidden"
-                          >
-                            <ToolPart
-                              part={toolPart}
-                              messageId={message.id}
-                              index={i}
-                              executionTimeMs={getExecutionTimeMs(
-                                toolPart,
-                                message,
-                              )}
-                              open={
-                                openToolPartKeys !== undefined &&
-                                openToolPartKeys !== null
-                                  ? openToolPartKeys.has(toolPartKey)
-                                  : undefined
-                              }
-                              onOpenChange={
-                                onToolPartOpenChange
-                                  ? (open) =>
-                                      onToolPartOpenChange(toolPartKey, open)
-                                  : undefined
-                              }
-                              defaultOpenWhenUncontrolled={isLastPart}
-                              onPasteToNotebook={onPasteToNotebook}
-                              notebookContext={notebookContext}
-                              onToolApproval={onToolApproval}
-                              pluginLogoMap={pluginLogoMap}
-                              selectedDatasourceItems={selectedDatasourceItems}
-                              messages={messages}
-                              datasources={messageDatasourcesForTool}
-                              onDatasourceNameClick={onDatasourceNameClick}
-                              onTableNameClick={onTableNameClick}
-                            />
-                          </div>
-                        );
-                      }
+                      const toolPartProps = {
+                        part: toolPart,
+                        messageId: message.id,
+                        index: i,
+                        executionTimeMs: getExecutionTimeMs(toolPart, message),
+                        open:
+                          openToolPartKeys !== undefined &&
+                          openToolPartKeys !== null
+                            ? openToolPartKeys.has(toolPartKey)
+                            : undefined,
+                        onOpenChange: onToolPartOpenChange
+                          ? (open: boolean) =>
+                              onToolPartOpenChange(toolPartKey, open)
+                          : undefined,
+                        defaultOpenWhenUncontrolled:
+                          i === message.parts.length - 1,
+                        onPasteToNotebook,
+                        notebookContext,
+                        onToolApproval,
+                        pluginLogoMap,
+                        selectedDatasourceItems,
+                        messages,
+                        datasources: messageDatasourcesForTool,
+                        onDatasourceNameClick,
+                        onTableNameClick,
+                      };
 
-                      // Use ToolPart component for completed tools (includes visualizers)
                       return (
                         <div
                           key={toolPartKey}
                           className="flex w-full max-w-full min-w-0 flex-col justify-start gap-2 overflow-x-hidden"
                         >
-                          <ToolPart
-                            part={toolPart}
-                            messageId={message.id}
-                            index={i}
-                            executionTimeMs={getExecutionTimeMs(
-                              toolPart,
-                              message,
-                            )}
-                            open={
-                              openToolPartKeys !== undefined &&
-                              openToolPartKeys !== null
-                                ? openToolPartKeys.has(toolPartKey)
-                                : undefined
-                            }
-                            onOpenChange={
-                              onToolPartOpenChange
-                                ? (open) =>
-                                    onToolPartOpenChange(toolPartKey, open)
-                                : undefined
-                            }
-                            defaultOpenWhenUncontrolled={
-                              i === message.parts.length - 1
-                            }
-                            onPasteToNotebook={onPasteToNotebook}
-                            notebookContext={notebookContext}
-                            onToolApproval={onToolApproval}
-                            pluginLogoMap={pluginLogoMap}
-                            selectedDatasourceItems={selectedDatasourceItems}
-                            messages={messages}
-                            datasources={messageDatasourcesForTool}
-                            onDatasourceNameClick={onDatasourceNameClick}
-                            onTableNameClick={onTableNameClick}
+                          <ToolWithTaskDelimiter
+                            parts={message.parts}
+                            partIndex={i}
+                            {...toolPartProps}
                           />
                         </div>
                       );
@@ -1058,6 +1039,10 @@ export const MessageItem = memo(MessageItemComponent, (prev, next) => {
   }
 
   if (prev.editText !== next.editText) {
+    return false;
+  }
+
+  if (prev.editDatasources !== next.editDatasources) {
     return false;
   }
 

@@ -73,7 +73,7 @@ import { Sparkles } from 'lucide-react';
 import {
   QweryPromptInput,
   type DatasourceItem,
-  ToolPart,
+  ToolWithTaskDelimiter,
   TodoPart,
   useInfiniteMessages,
   VirtuosoMessageList,
@@ -697,8 +697,10 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
       }
     }
 
-    regenerate();
-    scrollToBottomRef.current?.();
+    setTimeout(() => {
+      regenerate();
+      scrollToBottomRef.current?.();
+    }, 0);
   }, [
     editingMessageId,
     editText,
@@ -1123,6 +1125,7 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                     return (
                       <div
                         key={message.id}
+                        data-message-id={message.id}
                         className="max-w-full min-w-0 overflow-x-hidden"
                       >
                         {message.role === 'assistant' &&
@@ -1244,6 +1247,12 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                                       return undefined;
                                     })()
                                   : undefined;
+
+                              const lastUserMessage = [...messages]
+                                .reverse()
+                                .find((msg) => msg.role === 'user');
+                              const isLastUserMessage =
+                                lastUserMessage?.id === message.id;
 
                               return (
                                 <div
@@ -1394,26 +1403,41 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
 
                                             if (context) {
                                               return (
-                                                <UserMessageBubble
-                                                  key={`${message.id}-${i}`}
-                                                  text={text}
-                                                  context={context}
-                                                  messageId={message.id}
-                                                  messages={messages}
-                                                  datasources={
-                                                    messageDatasources
-                                                  }
-                                                  pluginLogoMap={pluginLogoMap}
-                                                />
+                                                <div className="group/msg w-full max-w-full min-w-0">
+                                                  <UserMessageBubble
+                                                    key={`${message.id}-${i}`}
+                                                    text={text}
+                                                    context={context}
+                                                    messageId={message.id}
+                                                    messages={messages}
+                                                    datasources={
+                                                      messageDatasources
+                                                    }
+                                                    allDatasources={datasources}
+                                                    pluginLogoMap={
+                                                      pluginLogoMap
+                                                    }
+                                                    isLastUserMessage={
+                                                      isLastUserMessage
+                                                    }
+                                                  />
+                                                </div>
                                               );
                                             }
 
                                             return (
-                                              <div className="flex flex-col items-end gap-1.5">
+                                              <div className="group/msg flex flex-col items-end gap-1.5">
                                                 {messageDatasources &&
                                                   messageDatasources.length >
                                                     0 && (
-                                                    <div className="flex w-full max-w-[80%] min-w-0 justify-end overflow-x-hidden">
+                                                    <div
+                                                      className={cn(
+                                                        'flex min-h-6 w-full max-w-[80%] min-w-0 justify-end overflow-x-hidden transition-opacity',
+                                                        isLastUserMessage
+                                                          ? 'opacity-100'
+                                                          : 'opacity-0 group-hover/msg:opacity-100',
+                                                      )}
+                                                    >
                                                       <DatasourceBadges
                                                         datasources={
                                                           messageDatasources
@@ -1645,38 +1669,11 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                                 const isLastPart =
                                   i === message.parts.length - 1;
 
-                                if (isToolInProgress) {
-                                  return (
-                                    <ToolPart
-                                      key={toolPartKey}
-                                      part={toolPart}
-                                      messageId={message.id}
-                                      index={i}
-                                      executionTimeMs={getExecutionTimeMs(
-                                        toolPart,
-                                        message,
-                                      )}
-                                      open={openToolPartKeys.has(toolPartKey)}
-                                      onOpenChange={(open) =>
-                                        handleToolPartOpenChange(
-                                          toolPartKey,
-                                          open,
-                                        )
-                                      }
-                                      defaultOpenWhenUncontrolled={isLastPart}
-                                      onPasteToNotebook={onPasteToNotebook}
-                                      notebookContext={currentNotebookContext}
-                                      onDatasourceNameClick={
-                                        onDatasourceNameClick
-                                      }
-                                      onTableNameClick={onTableNameClick}
-                                    />
-                                  );
-                                }
-
                                 return (
-                                  <ToolPart
+                                  <ToolWithTaskDelimiter
                                     key={toolPartKey}
+                                    parts={message.parts}
+                                    partIndex={i}
                                     part={toolPart}
                                     messageId={message.id}
                                     index={i}
@@ -1691,6 +1688,7 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                                         open,
                                       )
                                     }
+                                    defaultOpenWhenUncontrolled={isLastPart}
                                     onPasteToNotebook={onPasteToNotebook}
                                     notebookContext={currentNotebookContext}
                                     onDatasourceNameClick={

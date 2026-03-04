@@ -17,6 +17,7 @@ export {
   type TaskUIPart,
   type StartedStepIndicatorProps,
 } from './message-parts';
+export { ToolWithTaskDelimiter } from './tool-with-task-delimiter';
 
 export {
   Queue,

@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from 'react';
-import { Links, Meta, Outlet, Scripts, data } from "react-router";
+import { useCallback, useEffect, useState } from 'react';
+import { Links, Meta, Outlet, Scripts, data, useLocation, useNavigate } from "react-router";
 import type { Route } from '~/types/app/+types/root';
 
 import appConfig from '../../web/config/app.config';
@@ -103,6 +103,11 @@ function AppContent({
   className?: string;
   theme?: string;
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
+
   useEffect(() => {
     if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
     initDesktopApi();
@@ -113,6 +118,24 @@ function AppContent({
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setCanGoBack(false);
+      setCanGoForward(false);
+      return;
+    }
+
+    const historyState = window.history.state as { idx?: number } | null;
+    const idx =
+      historyState && typeof historyState.idx === 'number'
+        ? historyState.idx
+        : 0;
+    const length = window.history.length;
+
+    setCanGoBack(idx > 0);
+    setCanGoForward(idx < length - 1);
+  }, [location.key]);
 
   const handleMenuAction = useCallback((action: MenuActionId) => {
     switch (action) {
@@ -132,6 +155,16 @@ function AppContent({
     }
   }, []);
 
+  const handleBack = useCallback(() => {
+    if (!canGoBack) return;
+    navigate(-1);
+  }, [canGoBack, navigate]);
+
+  const handleForward = useCallback(() => {
+    if (!canGoForward) return;
+    navigate(1);
+  }, [canGoForward, navigate]);
+
   useMenuActions(handleMenuAction);
   const onOpenCommandPalette = useCallback(() => {
     window.dispatchEvent(new CustomEvent('open-command-palette'));
@@ -141,7 +174,13 @@ function AppContent({
   return (
     <>
       <div className="flex h-screen w-screen flex-col overflow-hidden">
-        <Titlebar onMenuAction={handleMenuAction} />
+        <Titlebar
+          onMenuAction={handleMenuAction}
+          onBack={handleBack}
+          onForward={handleForward}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
+        />
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <RootProviders theme={theme as 'light' | 'dark' | 'system' | undefined} language={'en'}>
             <Outlet />

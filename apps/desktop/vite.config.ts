@@ -79,6 +79,15 @@ export default defineConfig(async () => ({
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageJson.version),
     'import.meta.env.VITE_GIT_HASH': JSON.stringify(gitHash),
   },
+  resolve: {
+    alias: {
+      '@qwery/shared/workspace': path.resolve(
+        process.cwd(),
+        '../..',
+        'packages/shared/src/workspace.ts',
+      ),
+    },
+  },
   plugins: [
     extensionsMimeTypePlugin(),
     reactRouter(),

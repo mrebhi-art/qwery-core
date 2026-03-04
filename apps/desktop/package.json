@@ -13,6 +13,7 @@
     "validate:extensions": "node scripts/validate-extensions-bundle.js"
   },
   "dependencies": {
+    "@qwery/shared": "workspace:*",
     "@qwery/ui": "workspace:*",
     "@radix-ui/react-menubar": "^1.1.16",
     "@react-router/node": "^7.13.0",

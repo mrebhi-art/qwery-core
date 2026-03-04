@@ -1,10 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Minimize, Maximize, X, Square } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Info,
+  Minimize,
+  Maximize,
+  X,
+  Square,
+  Zap,
+  Code2,
+} from 'lucide-react';
 import * as Menubar from '@radix-ui/react-menubar';
 import { cn } from '@qwery/ui/utils';
 import type { MenuActionId } from '../hooks/use-menu-actions';
+import type { WorkspaceMode } from '@qwery/ui/workspace-mode-switch';
+import {
+  getWorkspaceFromLocalStorage,
+  setWorkspaceInLocalStorage,
+} from '@qwery/shared/workspace';
 
 function isTauri() {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -12,13 +27,24 @@ function isTauri() {
 
 type TitlebarProps = {
   onMenuAction?: (action: MenuActionId) => void;
+  onBack?: () => void;
+  onForward?: () => void;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
 };
 
-export function Titlebar({ onMenuAction }: TitlebarProps) {
+export function Titlebar({
+  onMenuAction,
+  onBack,
+  onForward,
+  canGoBack = false,
+  canGoForward = false,
+}: TitlebarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isTauriEnv, setIsTauriEnv] = useState(false);
   const [platform, setPlatform] = useState<string>('');
   const [appWindow, setAppWindow] = useState<Awaited<ReturnType<typeof import('@tauri-apps/api/window').getCurrentWindow>> | null>(null);
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('simple');
 
   useEffect(() => {
     const init = async () => {
@@ -33,6 +59,15 @@ export function Titlebar({ onMenuAction }: TitlebarProps) {
       }
     };
     init();
+  }, []);
+
+  useEffect(() => {
+    const workspace = getWorkspaceFromLocalStorage();
+    if (workspace && workspace.mode === 'advanced') {
+      setWorkspaceMode('advanced');
+    } else {
+      setWorkspaceMode('simple');
+    }
   }, []);
 
   useEffect(() => {
@@ -96,8 +131,86 @@ export function Titlebar({ onMenuAction }: TitlebarProps) {
     platform && `platform-${platform}`,
   );
 
+  const handleInfoClick = () => {
+    try {
+      if (isTauriEnv) {
+        void import('@tauri-apps/plugin-opener')
+          .then(({ openUrl }) => openUrl('https://qwery.run'))
+          .catch(() => {
+            if (typeof window !== 'undefined') {
+              const url = 'https://qwery.run';
+              const opened = window.open(url, '_blank', 'noopener,noreferrer');
+              if (!opened) {
+                window.location.href = url;
+              }
+            }
+          });
+      } else if (typeof window !== 'undefined') {
+        const url = 'https://qwery.run';
+        const opened = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!opened) {
+          window.location.href = url;
+        }
+      }
+    } catch {
+      // Best-effort only
+    }
+  };
+
+  const handleWorkspaceModeChange = async (mode: WorkspaceMode) => {
+    try {
+      const workspace = getWorkspaceFromLocalStorage();
+      if (workspace) {
+        setWorkspaceInLocalStorage({
+          ...workspace,
+          // Stored as enum in domain, but value is 'simple' | 'advanced'
+          mode: mode as unknown as never,
+        } as never);
+      }
+      setWorkspaceMode(mode);
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+    } catch {
+      // Best-effort only
+    }
+  };
+
   const windowControls = (
     <div className="flex items-center gap-1">
+      <button
+        onClick={() =>
+          handleWorkspaceModeChange(
+            workspaceMode === 'simple' ? 'advanced' : 'simple',
+          )
+        }
+        className="hover:bg-muted flex h-8 w-8 items-center justify-center rounded transition-colors"
+        aria-label={
+          workspaceMode === 'simple'
+            ? 'Switch to advanced mode'
+            : 'Switch to simple mode'
+        }
+        title={
+          workspaceMode === 'simple'
+            ? 'Simple mode: click to switch to Advanced mode'
+            : 'Advanced mode: click to switch to Simple mode'
+        }
+        type="button"
+      >
+        {workspaceMode === 'simple' ? (
+          <Zap className="h-4 w-4" />
+        ) : (
+          <Code2 className="h-4 w-4" />
+        )}
+      </button>
+      <button
+        onClick={handleInfoClick}
+        className="hover:bg-muted flex h-8 w-8 items-center justify-center rounded transition-colors"
+        aria-label="About Qwery"
+        type="button"
+      >
+        <Info className="h-4 w-4" />
+      </button>
       <button
         onClick={handleMinimize}
         className="hover:bg-muted flex h-8 w-8 items-center justify-center rounded transition-colors"
@@ -131,6 +244,41 @@ export function Titlebar({ onMenuAction }: TitlebarProps) {
   const titleBlock = (
     <div className="flex items-center gap-3">
       <div className="text-foreground text-sm font-semibold">Qwery</div>
+      {isTauriEnv && (
+        <div
+          data-tauri-drag-region="no-drag"
+          className="flex items-center gap-1"
+        >
+          <button
+            onClick={onBack}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded transition-colors',
+              canGoBack
+                ? 'hover:bg-muted'
+                : 'cursor-default opacity-40',
+            )}
+            aria-label="Back"
+            type="button"
+            disabled={!canGoBack}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onForward}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded transition-colors',
+              canGoForward
+                ? 'hover:bg-muted'
+                : 'cursor-default opacity-40',
+            )}
+            aria-label="Forward"
+            type="button"
+            disabled={!canGoForward}
+          >
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {hasMenu && (
         <Menubar.Root
           data-tauri-drag-region="no-drag"
@@ -214,19 +362,6 @@ export function Titlebar({ onMenuAction }: TitlebarProps) {
             </Menubar.Content>
           </Menubar.Menu>
 
-          <Menubar.Menu>
-            <Menubar.Trigger className="hover:bg-muted/70 data-[state=open]:bg-muted/90 rounded px-2 py-1">
-              Help
-            </Menubar.Trigger>
-            <Menubar.Content className="bg-popover text-popover-foreground z-[1000] min-w-[10rem] overflow-hidden rounded-md border p-1 shadow-md">
-              <Menubar.Item
-                className="focus:bg-accent focus:text-accent-foreground flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-xs outline-none"
-                onClick={() => onMenuAction?.('help_about')}
-              >
-                About Qwery
-              </Menubar.Item>
-            </Menubar.Content>
-          </Menubar.Menu>
         </Menubar.Root>
       )}
     </div>

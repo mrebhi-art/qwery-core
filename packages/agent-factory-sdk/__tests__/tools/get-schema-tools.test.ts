@@ -236,5 +236,4 @@ describe('schema tools', () => {
     process.env.QWERY_GET_SCHEMA_MODE = 'something-else';
     expect(schemaToolsUtils.resolveGetSchemaMode()).toBe('compact');
   });
-
 });

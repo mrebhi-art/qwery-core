@@ -61,3 +61,9 @@ logger.info(
   { hostname: server.hostname, port: server.port },
   `Listening on http://${server.hostname}:${server.port}`,
 );
+
+// Drain tracing flush queue on process exit
+process.on('beforeExit', async () => {
+  const { shutdownTracing } = await import('./lib/tracing');
+  await shutdownTracing();
+});

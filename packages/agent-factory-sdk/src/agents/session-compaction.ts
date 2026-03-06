@@ -10,6 +10,7 @@ import { CreateMessageService } from '@qwery/domain/services';
 import { Registry } from '../tools/registry';
 import { COMPACTION_PROMPT } from './prompts/compaction.prompt';
 import { v4 as uuidv4 } from 'uuid';
+import type { TraceSessionLike } from './tracing';
 
 const OUTPUT_TOKEN_MAX = 32_000;
 const PRUNE_MINIMUM = 20_000;
@@ -158,10 +159,13 @@ export async function isOverflow(input: IsOverflowInput): Promise<boolean> {
 export type PruneInput = {
   conversationSlug: string;
   repositories: Repositories;
+  traceSession?: TraceSessionLike;
 };
 
 export async function prune(input: PruneInput): Promise<void> {
-  const { conversationSlug, repositories } = input;
+  const { conversationSlug, repositories, traceSession } = input;
+  const startedAt = traceSession ? new Date() : null;
+  const startedAtMs = traceSession ? performance.now() : null;
   const conversation =
     await repositories.conversation.findBySlug(conversationSlug);
   if (!conversation) return;
@@ -276,6 +280,20 @@ export async function prune(input: PruneInput): Promise<void> {
         PRUNE_MINIMUM,
       },
     );
+    if (traceSession && startedAt && startedAtMs !== null) {
+      const endedAt = new Date();
+      traceSession.addStep({
+        type: 'custom',
+        name: 'message_prune_skipped',
+        input: { conversationSlug },
+        output: { prunedTokens: pruned, threshold: PRUNE_MINIMUM },
+        error: null,
+        latencyMs: Math.round(performance.now() - startedAtMs),
+        startedAt,
+        endedAt,
+        metadata: { partsCount: toPrune.length },
+      });
+    }
     return;
   }
 
@@ -325,6 +343,20 @@ export async function prune(input: PruneInput): Promise<void> {
       updatedBy: message.updatedBy ?? 'system',
     });
   }
+
+  if (traceSession && startedAt && startedAtMs !== null) {
+    const endedAt = new Date();
+    traceSession.addStep({
+      type: 'custom',
+      name: 'message_prune',
+      input: { conversationSlug },
+      output: { prunedTokens: pruned, partsCount: toPrune.length },
+      error: null,
+      latencyMs: Math.round(performance.now() - startedAtMs),
+      startedAt,
+      endedAt,
+    });
+  }
 }
 
 export type ProcessInput = {
@@ -334,12 +366,13 @@ export type ProcessInput = {
   abort: AbortSignal;
   auto: boolean;
   repositories: Repositories;
+  traceSession?: TraceSessionLike;
 };
 
 const COMPACTION_USER_PROMPT =
   'Write a concise internal summary that another assistant can use to continue this conversation without access to the full history. Focus only on what was done, what is being worked on, which datasources are in use, and what should happen next. Do NOT ask questions, do NOT present choices or menus, and do NOT address the end user; this text will be used purely as internal context.';
 
-export async function process(input: ProcessInput): Promise<'continue'> {
+export async function process(input: ProcessInput): Promise<'continue' | 'stop'> {
   const {
     parentID,
     messages,
@@ -347,6 +380,7 @@ export async function process(input: ProcessInput): Promise<'continue'> {
     abort,
     auto: _auto,
     repositories,
+    traceSession,
   } = input;
 
   const logger = await getLogger();
@@ -387,75 +421,132 @@ export async function process(input: ProcessInput): Promise<'continue'> {
     },
   ];
 
-  const result = await generateText({
-    model: await Provider.getLanguage(model),
-    messages: compactionMessages,
-    system: COMPACTION_PROMPT,
-    abortSignal: abort,
-  });
+  const compactionStartedAt = traceSession ? new Date() : null;
+  const compactionStartedAtMs = traceSession ? performance.now() : null;
 
-  const conversation =
-    await repositories.conversation.findBySlug(conversationSlug);
-  if (!conversation) {
-    throw new Error(
-      `[SessionCompaction] Conversation not found during compaction: ${conversationSlug}`,
+  try {
+    const result = await generateText({
+      model: await Provider.getLanguage(model),
+      messages: compactionMessages,
+      system: COMPACTION_PROMPT,
+      abortSignal: abort,
+    });
+
+    const conversation =
+      await repositories.conversation.findBySlug(conversationSlug);
+    if (!conversation) {
+      throw new Error(
+        `[SessionCompaction] Conversation not found during compaction: ${conversationSlug}`,
+      );
+    }
+
+    const persistence = new MessagePersistenceService(
+      repositories.message,
+      repositories.conversation,
+      conversationSlug,
     );
+
+    const rawSummaryText = result.text.trim();
+    const summaryText = truncateSummaryByTokens(rawSummaryText, 300);
+    const assistantMsg = {
+      id: uuidv4(),
+      role: 'assistant' as const,
+      parts: [{ type: 'text' as const, text: summaryText }],
+      metadata: {
+        hidden: true,
+        summary: true,
+        finish: 'stop',
+        parentId: parentID,
+        tokens: {
+          input:
+            (result.usage as { inputTokens?: number; promptTokens?: number })
+              ?.inputTokens ??
+            (result.usage as { promptTokens?: number })?.promptTokens ??
+            0,
+          output:
+            (
+              result.usage as {
+                outputTokens?: number;
+                completionTokens?: number;
+              }
+            )?.outputTokens ??
+            (result.usage as { completionTokens?: number })?.completionTokens ??
+            0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+      },
+    };
+
+    await persistence.persistMessages([assistantMsg], undefined, {
+      defaultMetadata: {
+        agent: 'compaction',
+        model: {
+          modelID: model.id,
+          providerID: model.providerID,
+        },
+      },
+    });
+
+    if (traceSession && compactionStartedAt && compactionStartedAtMs !== null) {
+      const endedAt = new Date();
+      const promptTokens =
+        (result.usage as { inputTokens?: number; promptTokens?: number })
+          ?.inputTokens ??
+        (result.usage as { promptTokens?: number })?.promptTokens ??
+        0;
+      const completionTokens =
+        (
+          result.usage as {
+            outputTokens?: number;
+            completionTokens?: number;
+          }
+        )?.outputTokens ??
+        (result.usage as { completionTokens?: number })?.completionTokens ??
+        0;
+      const tokenUsage = {
+        promptTokens,
+        completionTokens,
+        totalTokens: promptTokens + completionTokens,
+      };
+      traceSession.addLlmStep({
+        name: 'compaction',
+        input: compactionMessages,
+        output: summaryText,
+        tokenUsage,
+        latencyMs: Math.round(performance.now() - compactionStartedAtMs),
+        startedAt: compactionStartedAt,
+        endedAt,
+        metadata: { conversationSlug },
+      });
+    }
+
+    logger.info('[SessionCompaction] Compaction summary created', {
+      conversationSlug,
+      parentID,
+      summaryLength: summaryText.length,
+      summaryTokensApprox: estimateTokens(summaryText),
+    });
+  } catch (err) {
+    if (traceSession && compactionStartedAt && compactionStartedAtMs !== null) {
+      const endedAt = new Date();
+      traceSession.addLlmStep({
+        name: 'compaction',
+        input: compactionMessages,
+        output: null,
+        error: err instanceof Error ? err.message : String(err),
+        latencyMs: Math.round(performance.now() - compactionStartedAtMs),
+        startedAt: compactionStartedAt,
+        endedAt,
+        metadata: { conversationSlug },
+      });
+    }
+    logger.warn(
+      '[SessionCompaction] Process failed',
+      err instanceof Error ? err.message : String(err),
+    );
+    return 'stop';
   }
-
-  const persistence = new MessagePersistenceService(
-    repositories.message,
-    repositories.conversation,
-    conversationSlug,
-  );
-
-  const rawSummaryText = result.text.trim();
-  const summaryText = truncateSummaryByTokens(rawSummaryText, 300);
-  const assistantMsg = {
-    id: uuidv4(),
-    role: 'assistant' as const,
-    parts: [{ type: 'text' as const, text: summaryText }],
-    metadata: {
-      hidden: true,
-      summary: true,
-      finish: 'stop',
-      parentId: parentID,
-      tokens: {
-        input:
-          (result.usage as { inputTokens?: number; promptTokens?: number })
-            ?.inputTokens ??
-          (result.usage as { promptTokens?: number })?.promptTokens ??
-          0,
-        output:
-          (
-            result.usage as {
-              outputTokens?: number;
-              completionTokens?: number;
-            }
-          )?.outputTokens ??
-          (result.usage as { completionTokens?: number })?.completionTokens ??
-          0,
-        reasoning: 0,
-        cache: { read: 0, write: 0 },
-      },
-    },
-  };
-
-  await persistence.persistMessages([assistantMsg], undefined, {
-    defaultMetadata: {
-      agent: 'compaction',
-      model: {
-        modelID: model.id,
-        providerID: model.providerID,
-      },
-    },
-  });
-
-  logger.info('[SessionCompaction] Compaction summary created', {
-    conversationSlug,
-    parentID,
-    summaryLength: summaryText.length,
-    summaryTokensApprox: estimateTokens(summaryText),
-  });
 
   return 'continue';
 }
@@ -526,7 +617,14 @@ export async function create(input: CreateInput): Promise<void> {
   });
 }
 
-export const SessionCompaction = {
+export type SessionCompactionApi = {
+  isOverflow: typeof isOverflow;
+  prune: typeof prune;
+  process: typeof process;
+  create: typeof create;
+};
+
+export const SessionCompaction: SessionCompactionApi = {
   isOverflow,
   prune,
   process,

@@ -1,8 +1,5 @@
 import { UseCase } from '../usecase';
-import type {
-  CompactDatasourceSchema,
-  DatasourceMetadata,
-} from '../../entities';
+import type { CompactDatasourceSchema, DatasourceMetadata } from '../../entities';
 
 export interface TransformMetadataToCompactSchemaInput {
   metadata: DatasourceMetadata;

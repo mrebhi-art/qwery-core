@@ -45,64 +45,6 @@ import {
 import { useState, createContext, useMemo, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-type CompactSchemaOutput = {
-  schemas?: Array<{
-    name: string;
-    tables: Array<{
-      name: string;
-      columns: Array<{ name: string; type: string }>;
-    }>;
-  }>;
-};
-
-function toVisualizerSchema(schema: unknown): DatasourceMetadata | null {
-  if (!schema || typeof schema !== 'object') {
-    return null;
-  }
-
-  if ('tables' in schema) {
-    return schema as DatasourceMetadata;
-  }
-
-  const compact = schema as CompactSchemaOutput;
-  if (!Array.isArray(compact.schemas)) {
-    return null;
-  }
-
-  const tables: Array<Record<string, unknown>> = [];
-
-  for (const schemaEntry of compact.schemas) {
-    for (const table of schemaEntry.tables) {
-      tables.push({
-        id: `${schemaEntry.name}.${table.name}`,
-        schema: schemaEntry.name,
-        name: table.name,
-        columns: table.columns.map((column, index) => ({
-          id: `${schemaEntry.name}.${table.name}.${column.name}`,
-          table_id: index + 1,
-          schema: schemaEntry.name,
-          table: table.name,
-          name: column.name,
-          ordinal_position: index + 1,
-          data_type: column.type,
-        })),
-      });
-    }
-  }
-
-  return {
-    version: 'compact',
-    driver: 'compact',
-    schemas: compact.schemas.map((schemaEntry, index) => ({
-      id: index + 1,
-      name: schemaEntry.name,
-      owner: 'unknown',
-    })),
-    tables,
-    columns: [],
-  } as unknown as DatasourceMetadata;
-}
-
 function RunQueriesOpenSync({
   runQueriesAllOpen,
   runQueriesInputLength,
@@ -961,8 +903,7 @@ export function ToolPart({
 
     // Handle getSchema errors - show view names above error
     if (
-      (part.type === 'tool-getSchema' ||
-        part.type === 'tool-getSchemaDetailed') &&
+      part.type === 'tool-getSchema' &&
       part.state === 'output-error' &&
       part.errorText
     ) {
@@ -1795,7 +1736,7 @@ export function ToolPart({
     }
 
     // Handle getSchema - streaming/loading, then schema when output
-    if (part.type === 'tool-getSchema' || part.type === 'tool-getSchemaDetailed') {
+    if (part.type === 'tool-getSchema') {
       const input = part.input as { viewNames?: string[] } | null;
       if (!part.output && part.input != null) {
         const isInputStreaming = part.state === 'input-streaming';
@@ -1820,15 +1761,10 @@ export function ToolPart({
         );
       }
     }
-    if (
-      (part.type === 'tool-getSchema' ||
-        part.type === 'tool-getSchemaDetailed') &&
-      part.output
-    ) {
-      const output = part.output as { schema?: unknown } | null;
-      const visualizerSchema = toVisualizerSchema(output?.schema);
-      if (visualizerSchema) {
-        return <SchemaVisualizer schema={visualizerSchema} variant={variant} />;
+    if (part.type === 'tool-getSchema' && part.output) {
+      const output = part.output as { schema?: DatasourceMetadata } | null;
+      if (output?.schema) {
+        return <SchemaVisualizer schema={output.schema} variant={variant} />;
       } else {
         // Empty state when no schema data
         return (

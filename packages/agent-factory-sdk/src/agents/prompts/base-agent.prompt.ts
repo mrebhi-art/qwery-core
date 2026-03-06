@@ -57,10 +57,4 @@ EXPORT FILENAME (runQuery / runQueries):
 - **exportFilename**: lowercase letters, numbers, and hyphens only; no spaces; max 50 characters (e.g. \`machines-active-status\`, \`top-10-orders-by-revenue\`).
 - For **runQuery**: include one \`exportFilename\` in the tool call.
 - For **runQueries**: include one \`exportFilename\` per item in \`queries\` (same order as each \`query\`).
-
-SQL RESULT HANDLING:
-- If query results are already shown in the tool/table UI, do not repeat full row dumps in your text response.
-- Summarize what was returned (for example row count, key columns, quick observations) instead of reprinting every row.
-- If the user asks for more rows or specific slices, call **peekQueryResult** with \`queryId\` and return only the requested slice.
-- If the user asks to "show first N rows" but does not specify a table, do not call **getSchema**. Ask one short clarification question and include known table names if they are already available from prior tool output.
 `;

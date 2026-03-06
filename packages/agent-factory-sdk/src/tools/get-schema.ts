@@ -1,67 +1,74 @@
 import { z } from 'zod';
 import { Tool } from './tool';
+import {
+  ExtensionsRegistry,
+  type DatasourceExtension,
+} from '@qwery/extensions-sdk';
+import { getDriverInstance } from '@qwery/extensions-loader';
 import { getLogger } from '@qwery/shared/logger';
 import { Repositories } from '@qwery/domain/repositories';
-import {
-  createDatasourceSchemaService,
-  logSchemaPayloadStats,
-  resolveGetSchemaMode,
-} from './schema/schema-tools.utils';
 
-const DESCRIPTION = `Get datasource schema optimized for NL-to-SQL planning.
-Default mode returns compact schema (schema, table, column, type with minimal keys).
-Set QWERY_GET_SCHEMA_MODE=legacy to return full metadata.`;
+const DESCRIPTION = `Get schema information (columns, data types) for a datasource using its native driver.
+Returns column names and types for all tables/views in the datasource.`;
 
 export const GetSchemaTool = Tool.define('getSchema', {
   description: DESCRIPTION,
   parameters: z.object({}),
-  async execute(_params, ctx) {
+  async execute(params, ctx) {
     const logger = await getLogger();
     const { repositories, attachedDatasources } = ctx.extra as {
       repositories: Repositories;
       attachedDatasources: string[];
     };
 
-    const datasourceId = attachedDatasources[0] ?? '';
-    const mode = resolveGetSchemaMode();
-
     logger.debug('[GetSchemaTool] Tool execution:', {
-      datasourceId,
       attachedDatasources,
-      mode,
     });
 
-    const schemaService = createDatasourceSchemaService(repositories);
-    const result = await schemaService.execute({
-      datasourceId,
-      mode,
-    });
-
-    if (!result.success || !result.value) {
-      const message = result.error?.message ?? 'Unable to fetch datasource schema';
-      throw new Error(message);
+    const datasource = await repositories.datasource.findById(
+      attachedDatasources[0] ?? '',
+    );
+    if (!datasource) {
+      throw new Error(`Datasource not found: ${params.datasourceId}`);
     }
 
-    const schemaOutput = result.value;
+    const extension = ExtensionsRegistry.get(datasource.datasource_provider) as
+      | DatasourceExtension
+      | undefined;
+    if (!extension?.drivers?.length) {
+      throw new Error(
+        `No driver found for provider: ${datasource.datasource_provider}`,
+      );
+    }
 
-    const allTables =
-      'tables' in schemaOutput.schema
-        ? schemaOutput.schema.tables.length
-        : schemaOutput.schema.schemas.reduce(
-            (count, schemaEntry) => count + schemaEntry.tables.length,
-            0,
-          );
+    const nodeDriver =
+      extension.drivers.find((d) => d.runtime === 'node') ??
+      extension.drivers[0];
+    if (!nodeDriver) {
+      throw new Error(
+        `No node driver for provider: ${datasource.datasource_provider}`,
+      );
+    }
 
-    logger.debug(
-      `[GetSchemaTool] Fetched schema for datasource ${datasourceId}: ${allTables} table(s)`,
-    );
+    const instance = await getDriverInstance(nodeDriver, {
+      config: datasource.config,
+    });
 
-    const payload = {
-      schema: schemaOutput.schema,
-    };
+    try {
+      const metadata = await instance.metadata();
 
-    logSchemaPayloadStats(logger, 'GetSchemaTool', payload);
+      const allTables = metadata.tables.length;
+      logger.debug(
+        `[GetSchemaTool] Fetched schema for datasource ${attachedDatasources[0]}: ${allTables} table(s)`,
+      );
 
-    return payload;
+      return {
+        schema: metadata,
+      };
+    } finally {
+      if (typeof instance.close === 'function') {
+        await instance.close();
+      }
+    }
   },
 });

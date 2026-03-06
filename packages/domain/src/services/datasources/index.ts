@@ -4,5 +4,3 @@ export * from './get-datasources-by-project-id.usecase';
 export * from './update-datasource.usecase';
 export * from './delete-datasource.usecase';
 export * from './transform-metadata-to-simple-schema.service';
-export * from './transform-metadata-to-compact-schema.service';
-export * from './get-datasource-schema.service';

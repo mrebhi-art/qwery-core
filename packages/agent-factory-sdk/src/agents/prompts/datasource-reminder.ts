@@ -12,7 +12,7 @@ export function buildDatasourceReminder(
   if (attachedDatasourceNames.length > 0) {
     const list = attachedDatasourceNames.join(', ');
     return wrapped(
-      `The following datasources are currently attached to this conversation: ${list}. Use getSchema for compact table discovery, getSchemaDetailed only when full metadata is needed, then runQuery to query.`,
+      `The following datasources are currently attached to this conversation: ${list}. Use getSchema to discover tables, then runQuery to query.`,
     );
   }
 

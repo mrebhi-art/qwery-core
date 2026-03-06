@@ -29,8 +29,6 @@ export * from './datasources/get-datasources-by-project-id.usecase';
 export * from './datasources/update-datasource.usecase';
 export * from './datasources/delete-datasource.usecase';
 export * from './datasources/transform-metadata-to-simple-schema.usecase';
-export * from './datasources/transform-metadata-to-compact-schema.usecase';
-export * from './datasources/get-datasource-schema.usecase';
 export * from './conversation/create-conversation.usecase';
 export * from './conversation/update-conversation.usecase';
 export * from './conversation/delete-conversation.usecase';

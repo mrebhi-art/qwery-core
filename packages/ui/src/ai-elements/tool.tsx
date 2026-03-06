@@ -180,7 +180,6 @@ const getToolIcon = (type: string, size: 'sm' | 'md' = 'md') => {
     'tool-runQueries': <ListIcon className={sizeClass} />,
     'tool-getTableSchema': <TableIcon className={sizeClass} />,
     'tool-getSchema': <FileSearchIcon className={sizeClass} />,
-    'tool-getSchemaDetailed': <FileSearchIcon className={sizeClass} />,
     'tool-generateChart': <BarChart3Icon className={sizeClass} />,
     'tool-selectChartType': <PieChartIcon className={sizeClass} />,
     'tool-deleteSheet': <Trash2Icon className={sizeClass} />,

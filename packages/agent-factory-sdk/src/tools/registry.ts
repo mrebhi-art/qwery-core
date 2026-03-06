@@ -7,7 +7,6 @@ import { AskAgent, QueryAgent, CompactionAgent, SummaryAgent } from '../agents';
 import { TodoWriteTool, TodoReadTool } from './todo';
 import { WebFetchTool } from './webfetch';
 import { GetSchemaTool } from './get-schema';
-import { GetSchemaDetailedTool } from './get-schema-detailed';
 import { RunQueryTool } from './run-query';
 import { RunQueriesTool } from './run-queries';
 import { SelectChartTypeTool } from './select-chart-type-tool';
@@ -23,7 +22,6 @@ const TASK_COMPLETING_TOOL_IDS = new Set([
   'runQuery',
   'runQueries',
   'getSchema',
-  'getSchemaDetailed',
   'generateChart',
   'selectChartType',
 ]);
@@ -71,10 +69,6 @@ function registerTools() {
   tools.set(WebFetchTool.id, WebFetchTool as unknown as ToolInfo);
   //tools.set(TestConnectionTool.id, TestConnectionTool as unknown as ToolInfo);
   tools.set(GetSchemaTool.id, GetSchemaTool as unknown as ToolInfo);
-  tools.set(
-    GetSchemaDetailedTool.id,
-    GetSchemaDetailedTool as unknown as ToolInfo,
-  );
   tools.set(RunQueryTool.id, RunQueryTool as unknown as ToolInfo);
   tools.set(RunQueriesTool.id, RunQueriesTool as unknown as ToolInfo);
   tools.set(SelectChartTypeTool.id, SelectChartTypeTool as unknown as ToolInfo);

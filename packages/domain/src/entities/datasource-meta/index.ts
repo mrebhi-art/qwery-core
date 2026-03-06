@@ -2,7 +2,6 @@ export * from './columns.type';
 export * from './tables.type';
 export * from './schema.type';
 export * from './simple-schema.type';
-export * from './compact-schema.type';
 export * from './extensions.type';
 export * from './version.type';
 export * from './views.type';

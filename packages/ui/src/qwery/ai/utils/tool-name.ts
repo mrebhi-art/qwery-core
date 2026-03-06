@@ -9,7 +9,6 @@ export function getUserFriendlyToolName(type: string): string {
     'tool-renameTable': 'Rename Table',
     'tool-deleteTable': 'Delete Table',
     'tool-getSchema': 'Get Schema',
-    'tool-getSchemaDetailed': 'Get Detailed Schema',
     'tool-getTableSchema': 'Get Table Schema',
     'tool-runQuery': 'Run Query',
     'tool-runQueries': 'Run Multiple Queries',

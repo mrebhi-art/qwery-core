@@ -1,0 +1,21 @@
+{
+  "extends": "@qwery/tsconfig/base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "skipLibCheck": true,
+    "lib": ["ES2023"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowJs": false,
+    "checkJs": false,
+    "baseUrl": ".",
+    "noEmit": true,
+    "types": ["bun"],
+    "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo.json",
+    "resolveJsonModule": true,
+    "esModuleInterop": true
+  },
+  "files": [],
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"]
+}

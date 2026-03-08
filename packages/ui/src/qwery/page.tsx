@@ -30,6 +30,8 @@ function PageWithHeaderSidebar(props: PageProps) {
     Children,
     Footer: _Footer,
     AgentSidebar,
+    TopNavigation,
+    MobileNavigation,
   } = getSlotsFromPage(props);
 
   return (
@@ -70,6 +72,7 @@ function PageWithHeaderSidebar(props: PageProps) {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

@@ -17217,9 +17217,6 @@ snapshots:
   '@webgpu/types@0.1.69':
     optional: true
 
-  '@xyflow/react@12.9.3(@types/react@19.2.3)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
-  '@xmldom/xmldom@0.8.11': {}
-
   '@xyflow/react@12.9.3(@types/react@19.2.3)(immer@11.1.4)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
       '@xyflow/system': 0.0.73

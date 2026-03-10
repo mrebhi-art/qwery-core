@@ -80,7 +80,7 @@ async function createProvider(
       return createOpenAICompatibleModelProvider({
         name: 'ollama-cloud',
         baseURL: getEnv('OLLAMA_BASE_URL') ?? 'https://ollama.com/v1',
-        apiKey: requireEnv('OLLAMA_API_KEY', 'Ollama Cloud'),
+        apiKey: getEnv('OLLAMA_API_KEY'),
         defaultModel: getEnv('OLLAMA_MODEL') ?? modelName,
       });
     }

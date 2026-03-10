@@ -44,10 +44,15 @@ const posthogProxy = async (request: Request, splat?: string) => {
     const response = await fetch(newUrl, fetchOptions);
     clearTimeout(timeoutId);
 
+    const safeHeaders = new Headers(response.headers);
+    safeHeaders.delete('content-encoding');
+    safeHeaders.delete('content-length');
+    safeHeaders.delete('transfer-encoding');
+
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
-      headers: response.headers,
+      headers: safeHeaders,
     });
   } catch (error) {
     // Always clear timeout to prevent memory leaks

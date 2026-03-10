@@ -84,7 +84,7 @@ export function WorkspaceProvider(props: React.PropsWithChildren) {
   }, [workspaceQuery.data]);
 
   useEffect(() => {
-    if (!workspaceQuery.data) {
+    if (!workspaceQuery.data || !repositories) {
       return;
     }
 
@@ -95,12 +95,32 @@ export function WorkspaceProvider(props: React.PropsWithChildren) {
         const runtime = await workspaceService.execute();
 
         const currentStored = getWorkspaceFromLocalStorage();
+        let organizationId = currentStored.organizationId;
+        let projectId = currentStored.projectId;
+
+        if (organizationId) {
+          const organization = await repositories.organization.findById(
+            organizationId,
+          );
+          if (!organization) {
+            organizationId = undefined;
+            projectId = undefined;
+          }
+        }
+
+        if (projectId) {
+          const project = await repositories.project.findById(projectId);
+          if (!project) {
+            projectId = undefined;
+          }
+        }
+
         const workspaceData: Workspace = {
           id: currentStored.id || uuidv4(),
           userId: currentStored.userId,
           username: currentStored.username,
-          organizationId: currentStored.organizationId,
-          projectId: currentStored.projectId,
+          organizationId,
+          projectId,
           isAnonymous: currentStored.isAnonymous,
           mode: currentStored.mode as Workspace['mode'],
           runtime: runtime,
@@ -113,7 +133,7 @@ export function WorkspaceProvider(props: React.PropsWithChildren) {
     };
 
     initWorkspace();
-  }, [workspaceQuery.data]);
+  }, [workspaceQuery.data, repositories]);
 
   const contextValue = useMemo(() => {
     if (!repositories || !workspace) {

@@ -118,7 +118,17 @@ function sdkCacheKey(
 }
 
 async function getSDK(model: Model): Promise<SDKWithLanguageModel> {
-  const provider = getProvider(model.providerID);
+  const normalizedProviderId = model.providerID.trim().toLowerCase();
+  const provider =
+    getProvider(model.providerID) ??
+    (normalizedProviderId.startsWith('ollama')
+      ? {
+          id: 'ollama',
+          name: 'ollama',
+          env: [],
+          models: {},
+        }
+      : undefined);
   if (!provider) {
     throw new ModelNotFoundError({
       providerID: model.providerID,
@@ -184,13 +194,45 @@ export const ModelNotFoundError = class ModelNotFoundError extends Error {
 };
 
 function getModel(providerID: string, modelID: string): Model {
+  const normalizedProviderId = providerID.trim().toLowerCase();
   const provider = getProvider(providerID);
   if (!provider) {
+    if (normalizedProviderId.startsWith('ollama')) {
+      const rawBaseUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
+      const normalizedBaseUrl = rawBaseUrl.endsWith('/v1')
+        ? rawBaseUrl
+        : `${rawBaseUrl.replace(/\/$/, '')}/v1`;
+
+      return {
+        providerID,
+        id: modelID,
+        api: {
+          id: modelID,
+          npm: '@ai-sdk/openai-compatible',
+          url: normalizedBaseUrl,
+        },
+        apiId: modelID,
+      };
+    }
+
     const suggestions = Object.keys(providers).slice(0, 3);
     throw new ModelNotFoundError({ providerID, modelID, suggestions });
   }
   const model = provider.models[modelID];
   if (!model) {
+    if (normalizedProviderId.startsWith('ollama')) {
+      const fallbackTemplate = Object.values(provider.models)[0];
+      return {
+        providerID,
+        id: modelID,
+        api: fallbackTemplate?.api ?? {
+          id: modelID,
+          npm: '@ai-sdk/openai-compatible',
+          url: process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/v1',
+        },
+        apiId: modelID,
+      };
+    }
     const suggestions = Object.keys(provider.models).slice(0, 3);
     throw new ModelNotFoundError({ providerID, modelID, suggestions });
   }

@@ -1,28 +1,42 @@
-import type { ChartType } from '../types/chart.types';
-
-type Chartish = {
-  chartType?: ChartType | string | null;
-};
+import type { ToolUIPart } from 'ai';
+import type { ChartType } from '../charts/chart-type-selector';
 
 export type ToolNameContext = {
-  output?: any;
-  input?: any;
+  output?: { chartType?: ChartType | null };
+  input?: { chartType?: ChartType | null };
 };
 
-export interface ToolNameOptions {
-  includeChartType?: boolean;
+function getChartTypeFromUnknown(
+  value: unknown,
+): ChartType | string | null | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+
+  const maybe = value as {
+    input?: { chartType?: ChartType | string | null } | null;
+    output?: { chartType?: ChartType | string | null } | null;
+  };
+
+  return maybe.output?.chartType ?? maybe.input?.chartType ?? undefined;
 }
 
-export function getToolChartType(context?: ToolNameContext): string | null {
-  if (!context) return null;
-  const chartType = context.output?.chartType || context.input?.chartType;
-  return typeof chartType === 'string' ? chartType : null;
+export function getToolChartType(part: unknown): ChartType | string | null {
+  return getChartTypeFromUnknown(part) ?? null;
 }
 
+export function getUserFriendlyToolName(type: string): string;
 export function getUserFriendlyToolName(
   type: string,
   context?: ToolNameContext,
-  options: ToolNameOptions = { includeChartType: true },
+): string;
+export function getUserFriendlyToolName(
+  type: string,
+  partOrContext: ToolNameContext | ToolUIPart,
+  options: { includeChartType?: boolean },
+): string;
+export function getUserFriendlyToolName(
+  type: string,
+  partOrContext?: unknown,
+  _options?: { includeChartType?: boolean },
 ): string {
   if (!type || typeof type !== 'string' || !type.trim()) {
     return 'Tool';
@@ -49,12 +63,8 @@ export function getUserFriendlyToolName(
 
   // Dynamic naming logic for charts
   const baseType = normalizedType.replace(/^tool-/, '');
-  if (
-    context &&
-    options.includeChartType &&
-    (baseType === 'generateChart' || baseType === 'selectChartType')
-  ) {
-    const chartType = getToolChartType(context);
+  if (baseType === 'generateChart' || baseType === 'selectChartType') {
+    const chartType = getChartTypeFromUnknown(partOrContext);
     if (chartType) {
       const formattedChartType =
         chartType.charAt(0).toUpperCase() + chartType.slice(1).toLowerCase();

@@ -26,7 +26,6 @@ import {
   type PromptInputMessage,
   usePromptInputAttachments,
   PromptInputProvider,
-  usePromptInputController,
 } from '../ai-elements/prompt-input';
 import {
   useState,
@@ -1953,7 +1952,6 @@ function PromptInputInner({
   onShowSuggestionBadgesChange?: (value: boolean) => void;
 }) {
   const attachments = usePromptInputAttachments();
-  const controller = usePromptInputController();
 
   const handleSubmit = async (message: PromptInputMessage) => {
     if (status === 'streaming' || status === 'submitted') {

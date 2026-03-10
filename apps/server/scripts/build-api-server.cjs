@@ -10,7 +10,8 @@ const PLATFORM_TRIPLE = {
 const triple = PLATFORM_TRIPLE[process.platform] || 'aarch64-apple-darwin';
 const serverRoot = path.resolve(__dirname, '..');
 const distDir = path.join(serverRoot, 'dist');
-const desktopBinaries = path.resolve(serverRoot, '../../desktop/src-tauri/binaries');
+// From apps/server → apps/desktop/src-tauri/binaries
+const desktopBinaries = path.resolve(serverRoot, '../desktop/src-tauri/binaries');
 const name = `api-server-${triple}`;
 const outfile = path.join(distDir, name);
 

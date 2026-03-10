@@ -28,36 +28,16 @@ function PageWithHeaderSidebar(props: PageProps) {
   const {
     Navigation,
     Children,
-    MobileNavigation,
-    TopNavigation,
     Footer: _Footer,
     AgentSidebar,
   } = getSlotsFromPage(props);
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden overflow-x-hidden">
-      {/* Topbar */}
-      <div
-        className={cn(
-          'bg-sidebar dark:border-border relative flex h-14 w-full shrink-0 items-center justify-between overflow-x-hidden border-b px-4',
-          props.sticky === false
-            ? ''
-            : 'bg-sidebar sticky top-0 z-[100] backdrop-blur-md',
-        )}
-      >
-        {/* Desktop Navigation */}
-        <div className="hidden w-full min-w-0 flex-1 items-center space-x-8 overflow-x-hidden lg:flex">
-          {TopNavigation}
-        </div>
-        {/* Mobile Navigation */}
-        {MobileNavigation}
-      </div>
-
-      {/* Sidebar + Content */}
       <div className="flex min-h-0 flex-1 overflow-hidden overflow-x-hidden">
         {Navigation}
-        {/* Main Content */}
-        <div className="bg-background relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
+        {/* Main Content - takes remaining width */}
+        <div className="bg-background relative flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden overflow-x-hidden">
           <div className="h-full min-h-0 max-w-full min-w-0 flex-1 overflow-x-hidden">
             {/* eslint-disable react-hooks/refs -- These are props being passed, not refs being accessed during render */}
             <ResizableContent

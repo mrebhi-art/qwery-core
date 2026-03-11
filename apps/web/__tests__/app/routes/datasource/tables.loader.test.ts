@@ -35,9 +35,7 @@ describe('datasource/tables loader', () => {
   it('returns datasource when service succeeds', async () => {
     const datasource = { id: 'ds-1', slug: 'ds-slug' };
     const repositories = { datasource: {} as unknown } as unknown;
-    getRepositoriesForLoaderMock.mockResolvedValue(
-      repositories as never,
-    );
+    getRepositoriesForLoaderMock.mockResolvedValue(repositories as never);
 
     const execute = vi
       .spyOn(GetDatasourceBySlugService.prototype, 'execute')
@@ -49,4 +47,3 @@ describe('datasource/tables loader', () => {
     expect(execute).toHaveBeenCalledWith('ds-slug');
   });
 });
-

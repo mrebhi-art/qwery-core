@@ -44,9 +44,7 @@ describe('organization/index loader', () => {
       project: {} as unknown,
     } as unknown;
 
-    getRepositoriesForLoaderMock.mockResolvedValue(
-      repositories as never,
-    );
+    getRepositoriesForLoaderMock.mockResolvedValue(repositories as never);
 
     const getOrgExecute = vi
       .spyOn(GetOrganizationBySlugService.prototype, 'execute')
@@ -66,4 +64,3 @@ describe('organization/index loader', () => {
     expect(getProjectsExecute).toHaveBeenCalledWith('org-1');
   });
 });
-

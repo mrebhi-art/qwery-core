@@ -35,9 +35,7 @@ describe('project/index loader', () => {
   it('returns project when service succeeds', async () => {
     const project = { id: 'prj-1', slug: 'slug-1' };
     const repositories = { project: {} as unknown } as unknown;
-    getRepositoriesForLoaderMock.mockResolvedValue(
-      repositories as never,
-    );
+    getRepositoriesForLoaderMock.mockResolvedValue(repositories as never);
 
     const execute = vi
       .spyOn(GetProjectBySlugService.prototype, 'execute')
@@ -49,4 +47,3 @@ describe('project/index loader', () => {
     expect(execute).toHaveBeenCalledWith('slug-1');
   });
 });
-

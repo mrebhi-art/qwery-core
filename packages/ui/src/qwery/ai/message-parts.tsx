@@ -43,6 +43,11 @@ import { ViewSheetVisualizer } from './sheets/view-sheet-visualizer';
 
 import { ViewSheetError } from './sheets/view-sheet-error';
 import {
+  WebFetchVisualizer,
+  getUrlMetadata,
+  SearchEngineIcon,
+} from './web-fetch-visualizer';
+import {
   Source,
   Sources,
   SourcesContent,
@@ -87,6 +92,9 @@ import {
   XCircleIcon,
   ArrowRightIcon,
   ChevronsUpDown,
+  GlobeIcon,
+  Loader2Icon,
+  ChevronRightIcon,
 } from 'lucide-react';
 import { ToolUIPart, UIMessage } from 'ai';
 import ReactMarkdown from 'react-markdown';
@@ -94,11 +102,10 @@ import remarkGfm from 'remark-gfm';
 import { agentMarkdownComponents, HeadingContext } from './markdown-components';
 import { ToolErrorVisualizer } from './tool-error-visualizer';
 import type { useChat } from '@ai-sdk/react';
-import { getUserFriendlyToolName, getToolChartType } from './utils/tool-name';
+import { getUserFriendlyToolName } from './utils/tool-name';
 import { useToolVariant } from './tool-variant-context';
 
 import { ChartRenderer, type ChartConfig } from './charts/chart-renderer';
-import { Badge } from '../../shadcn/badge';
 import {
   ChartSkeleton,
   TableResultsSkeleton,
@@ -177,8 +184,8 @@ function TaskStepRow({
         className={cn(
           'flex items-start gap-3 rounded-lg py-2 transition-all duration-200',
           variant === 'default' &&
-            !isSubstep &&
-            'hover:bg-accent/30 -mx-2 px-2',
+          !isSubstep &&
+          'hover:bg-accent/30 -mx-2 px-2',
           isSubstep && 'pl-2',
         )}
       >
@@ -621,7 +628,7 @@ const TodoRow = memo(
             className={cn(
               'text-sm leading-tight transition-all duration-200',
               (isCompleted || isCancelled) &&
-                'text-muted-foreground line-through opacity-70',
+              'text-muted-foreground line-through opacity-70',
               isInProgress && 'text-foreground font-medium',
             )}
           >
@@ -839,7 +846,7 @@ export function getExecutionTimeMsFromMessageParts(
       typeof data.toolCallId === 'string' ? data.toolCallId : undefined;
     const executionTimeMs =
       typeof data.executionTimeMs === 'number' &&
-      Number.isFinite(data.executionTimeMs)
+        Number.isFinite(data.executionTimeMs)
         ? data.executionTimeMs
         : undefined;
 
@@ -874,40 +881,18 @@ export function ToolPart({
   );
   const [openQueries, setOpenQueries] = useState<Set<number>>(new Set());
 
-  const isMinimal = variant === 'minimal';
-  const chartType = getToolChartType(part);
-
-  let toolName: React.ReactNode;
-  const baseType = (() => {
-    if (
-      'toolName' in part &&
-      typeof part.toolName === 'string' &&
-      part.toolName
-    ) {
-      const rawName = part.toolName;
-      return rawName.startsWith('tool-') ? rawName : `tool-${rawName}`;
-    }
-    return part.type;
-  })();
-
-  if (!isMinimal && chartType) {
-    const formattedChartType =
-      chartType.charAt(0).toUpperCase() + chartType.slice(1).toLowerCase();
-    toolName = (
-      <div className="flex items-center gap-2">
-        <span>{getUserFriendlyToolName(baseType)}</span>
-        <Badge
-          variant="secondary"
-          className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 h-4 px-1.5 py-0 text-[10px] font-bold tracking-wider uppercase"
-        >
-          {formattedChartType}
-        </Badge>
-      </div>
-    );
+  let toolName: string;
+  if (
+    'toolName' in part &&
+    typeof part.toolName === 'string' &&
+    part.toolName
+  ) {
+    const rawName = part.toolName;
+    toolName = rawName.startsWith('tool-')
+      ? getUserFriendlyToolName(rawName)
+      : getUserFriendlyToolName(`tool-${rawName}`);
   } else {
-    toolName = getUserFriendlyToolName(baseType, part, {
-      includeChartType: isMinimal,
-    });
+    toolName = getUserFriendlyToolName(part.type);
   }
   // Render specialized visualizers based on tool type
   const renderToolOutput = () => {
@@ -1137,17 +1122,17 @@ export function ToolPart({
       const output =
         typeof rawOutput === 'object' && rawOutput !== null
           ? (rawOutput as {
-              result?: {
-                rows?: unknown[];
-                columns?: unknown[];
-                query?: string;
-              };
-              sqlQuery?: string;
-              shouldPaste?: boolean;
-              chartExecutionOverride?: boolean;
-              executed?: boolean;
-              exportFilename?: string;
-            })
+            result?: {
+              rows?: unknown[];
+              columns?: unknown[];
+              query?: string;
+            };
+            sqlQuery?: string;
+            shouldPaste?: boolean;
+            chartExecutionOverride?: boolean;
+            executed?: boolean;
+            exportFilename?: string;
+          })
           : null;
 
       // No output yet: show SQL streaming (cursor) or loading results
@@ -1225,56 +1210,56 @@ export function ToolPart({
 
       const executedFlag =
         output &&
-        'executed' in output &&
-        typeof (output as Record<string, unknown>).executed === 'boolean'
+          'executed' in output &&
+          typeof (output as Record<string, unknown>).executed === 'boolean'
           ? (output as Record<string, unknown>).executed
           : undefined;
 
       // Check if we should show paste button (inline mode with shouldPaste flag)
       const shouldShowPasteButton = Boolean(
         shouldPaste === true &&
-          sqlQuery &&
-          onPasteToNotebook &&
-          notebookContext?.cellId !== undefined &&
-          notebookContext?.notebookCellType &&
-          notebookContext?.datasourceId,
+        sqlQuery &&
+        onPasteToNotebook &&
+        notebookContext?.cellId !== undefined &&
+        notebookContext?.notebookCellType &&
+        notebookContext?.datasourceId,
       );
 
       // Create paste handler callback
       const handlePasteToNotebook =
         shouldShowPasteButton && onPasteToNotebook
           ? () => {
-              if (
-                sqlQuery &&
-                notebookContext?.cellId !== undefined &&
-                notebookContext?.notebookCellType &&
-                notebookContext?.datasourceId
-              ) {
-                onPasteToNotebook(
-                  sqlQuery,
-                  notebookContext.notebookCellType,
-                  notebookContext.datasourceId,
-                  notebookContext.cellId,
-                );
-              }
+            if (
+              sqlQuery &&
+              notebookContext?.cellId !== undefined &&
+              notebookContext?.notebookCellType &&
+              notebookContext?.datasourceId
+            ) {
+              onPasteToNotebook(
+                sqlQuery,
+                notebookContext.notebookCellType,
+                notebookContext.datasourceId,
+                notebookContext.cellId,
+              );
             }
+          }
           : undefined;
 
       const exportFilename =
         (output &&
-        'exportFilename' in output &&
-        typeof output.exportFilename === 'string'
+          'exportFilename' in output &&
+          typeof output.exportFilename === 'string'
           ? output.exportFilename
           : undefined) ??
         (messages
           ? generateExportFilename(
-              messages,
-              messageId,
-              sqlQuery,
-              hasResults && output?.result?.columns
-                ? (output.result.columns as string[])
-                : undefined,
-            )
+            messages,
+            messageId,
+            sqlQuery,
+            hasResults && output?.result?.columns
+              ? (output.result.columns as string[])
+              : undefined,
+          )
           : undefined);
 
       return (
@@ -1284,13 +1269,13 @@ export function ToolPart({
             result={
               hasResults && output?.result
                 ? {
-                    result: {
-                      columns: output.result.columns as string[],
-                      rows: output.result.rows as Array<
-                        Record<string, unknown>
-                      >,
-                    },
-                  }
+                  result: {
+                    columns: output.result.columns as string[],
+                    rows: output.result.rows as Array<
+                      Record<string, unknown>
+                    >,
+                  },
+                }
                 : undefined
             }
             onPasteToNotebook={handlePasteToNotebook}
@@ -1314,22 +1299,22 @@ export function ToolPart({
       } | null;
       const runQueriesOutput = part.output as
         | {
-            results?: Array<{
-              id?: string;
-              query: string;
-              summary?: string;
-              success: boolean;
-              data?: {
-                result?: {
-                  columns?: unknown[];
-                  rows?: unknown[];
-                };
-                queryId?: string;
+          results?: Array<{
+            id?: string;
+            query: string;
+            summary?: string;
+            success: boolean;
+            data?: {
+              result?: {
+                columns?: unknown[];
+                rows?: unknown[];
               };
-              error?: string;
-            }>;
-            meta?: { total: number; succeeded: number; failed: number };
-          }
+              queryId?: string;
+            };
+            error?: string;
+          }>;
+          meta?: { total: number; succeeded: number; failed: number };
+        }
         | null
         | undefined;
 
@@ -1582,9 +1567,9 @@ export function ToolPart({
                         : (queryText?.split('\n')[0] ?? '').trim();
                     const result =
                       'data' in q &&
-                      q.data &&
-                      typeof q.data === 'object' &&
-                      'result' in q.data
+                        q.data &&
+                        typeof q.data === 'object' &&
+                        'result' in q.data
                         ? (q.data as { result?: unknown }).result
                         : undefined;
                     const hasTableData =
@@ -1597,12 +1582,12 @@ export function ToolPart({
                     const tableResult =
                       hasTableData && result
                         ? {
-                            columns: (result as { columns: unknown[] })
-                              .columns as string[],
-                            rows: (result as { rows: unknown[] }).rows as Array<
-                              Record<string, unknown>
-                            >,
-                          }
+                          columns: (result as { columns: unknown[] })
+                            .columns as string[],
+                          rows: (result as { rows: unknown[] }).rows as Array<
+                            Record<string, unknown>
+                          >,
+                        }
                         : null;
                     const error =
                       'error' in q && q.error
@@ -1724,7 +1709,7 @@ export function ToolPart({
                       className={cn(
                         'text-muted-foreground border-border/40 bg-muted/20 flex -translate-y-0.5 items-center justify-center rounded-md border p-1.5 opacity-0 transition-all group-hover/summary:translate-y-0 group-hover/summary:opacity-100 hover:scale-105 active:scale-95',
                         runQueriesAllOpen === false &&
-                          'bg-primary/10 border-primary/40 text-primary shadow-sm',
+                        'bg-primary/10 border-primary/40 text-primary shadow-sm',
                       )}
                       title={
                         runQueriesAllOpen === true
@@ -1797,12 +1782,12 @@ export function ToolPart({
                   const tableResult =
                     hasTableData && result
                       ? {
-                          columns: (result as { columns: unknown[] })
-                            .columns as string[],
-                          rows: (result as { rows: unknown[] }).rows as Array<
-                            Record<string, unknown>
-                          >,
-                        }
+                        columns: (result as { columns: unknown[] })
+                          .columns as string[],
+                        rows: (result as { rows: unknown[] }).rows as Array<
+                          Record<string, unknown>
+                        >,
+                      }
                       : null;
                   const hasTable = !!tableResult;
                   const rowCount = tableResult?.rows.length ?? 0;
@@ -1836,9 +1821,9 @@ export function ToolPart({
                       className={cn(
                         'border-border/40 bg-card/30 w-full overflow-hidden rounded-xl border transition-all duration-200',
                         isExecuting &&
-                          'ring-primary/30 border-primary/40 bg-primary/[0.02] shadow-primary/5 shadow-lg ring-2',
+                        'ring-primary/30 border-primary/40 bg-primary/[0.02] shadow-primary/5 shadow-lg ring-2',
                         success === false &&
-                          'border-destructive/30 bg-destructive/[0.02]',
+                        'border-destructive/30 bg-destructive/[0.02]',
                       )}
                     >
                       <CollapsibleTrigger className="group/item hover:bg-muted/40 flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
@@ -1961,8 +1946,8 @@ export function ToolPart({
                                   result={
                                     tableResult
                                       ? {
-                                          result: tableResult,
-                                        }
+                                        result: tableResult,
+                                      }
                                       : undefined
                                   }
                                   onPasteToNotebook={undefined}
@@ -2231,6 +2216,27 @@ export function ToolPart({
       }
     }
 
+    // Handle webfetch - show URL card/link (streaming or result)
+    if (part.type === 'tool-webfetch') {
+      const input = part.input as { url?: string; format?: 'text' | 'markdown' | 'html' } | null;
+      const url = input?.url ?? '';
+      if (url) {
+        const isStreaming =
+          part.state === 'input-streaming' || part.state === 'input-available';
+        return (
+          <WebFetchVisualizer
+            url={url}
+            format={input?.format}
+            variant={variant}
+            isStreaming={isStreaming}
+          />
+        );
+      }
+      if (!part.output && part.input != null) {
+        return <GenericToolSkeleton />;
+      }
+    }
+
     // Generic: no output yet but have input - show streaming/loading
     if (!part.output && part.input != null) {
       const isInputStreaming = part.state === 'input-streaming';
@@ -2250,13 +2256,89 @@ export function ToolPart({
     return <ToolOutput output={part.output} errorText={part.errorText} />;
   };
 
-  // Hide input section for runQuery (we show SQL in SQLQueryVisualizer)
+  // Hide input section for runQuery / runQueries / webfetch (we show in visualizer)
   const showInput =
     part.input != null &&
     part.type !== 'tool-runQuery' &&
-    part.type !== 'tool-runQueries';
+    part.type !== 'tool-runQueries' &&
+    part.type !== 'tool-webfetch';
 
   const isControlled = open !== undefined;
+
+  // Minimal webfetch: single non-collapsible line (tool name + search keywords + duration), clickable to open URL
+  if (variant === 'minimal' && part.type === 'tool-webfetch') {
+    const input = part.input as { url?: string } | null;
+    const url = input?.url ?? '';
+    const metadata = url ? getUrlMetadata(url) : null;
+    const searchKeywords = metadata?.searchQuery ?? metadata?.host ?? null;
+    const execMs = getExecutionTimeMs(part, executionTimeMs);
+    const executionTimeLabel =
+      execMs != null && Number.isFinite(execMs) && execMs >= 0
+        ? execMs < 1000
+          ? `${Math.round(execMs)}ms`
+          : `${(execMs / 1000).toFixed(2)}s`
+        : null;
+    const state = part.state;
+    const statusIcon =
+      state === 'output-available' || state === 'approval-responded' ? (
+        <CheckCircle2Icon className="text-emerald-600 dark:text-emerald-400 size-3" />
+      ) : state === 'output-error' ? (
+        <XCircleIcon className="text-destructive size-3" />
+      ) : state === 'input-streaming' || state === 'input-available' ? (
+        <Loader2Icon className="text-[#ffcb51] size-3 animate-spin" />
+      ) : (
+        <CircleDashedIcon className="text-muted-foreground size-3" />
+      );
+
+    return (
+      <div
+        key={`${messageId}-${index}`}
+        className={cn(
+          'group/tool not-prose flex w-full min-w-0 flex-col overflow-hidden transition-all mb-1',
+          'animate-in fade-in slide-in-from-bottom-2 duration-300 ease-in-out',
+          'max-w-[min(43.2rem,calc(100%-3rem))]',
+          'mx-4 sm:mx-6',
+        )}
+      >
+        <div className="group/header flex w-full items-center gap-2 py-1.5 text-left">
+          <div className="text-muted-foreground flex size-4 shrink-0 items-center justify-center">
+            <ChevronRightIcon className="size-3.5" aria-hidden />
+          </div>
+          <div className="text-primary flex size-4 shrink-0 items-center justify-center">
+            <GlobeIcon className="size-4" />
+          </div>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            {metadata?.engine ? (
+              <SearchEngineIcon engine={metadata.engine} className="size-3.5" />
+            ) : null}
+            <span className="text-muted-foreground truncate text-sm">
+              {toolName}
+            </span>
+            {searchKeywords && url ? (
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-muted-foreground hover:text-foreground truncate text-sm underline-offset-2 hover:underline"
+              >
+                · {searchKeywords}
+              </a>
+            ) : searchKeywords ? (
+              <span className="text-muted-foreground truncate text-sm">
+                · {searchKeywords}
+              </span>
+            ) : null}
+            {executionTimeLabel ? (
+              <span className="text-muted-foreground text-xs tabular-nums shrink-0">
+                {executionTimeLabel}
+              </span>
+            ) : null}
+            <div className="flex shrink-0 items-center">{statusIcon}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Minimal mode: avoid nested collapsibles for batch query runs.
   // ToolCallsGroup already collapses the section; this keeps runQueries simple.
@@ -2281,9 +2363,9 @@ export function ToolPart({
       {...(isControlled
         ? { open, onOpenChange }
         : {
-            defaultOpen:
-              defaultOpenWhenUncontrolled ?? TOOL_UI_CONFIG.DEFAULT_OPEN,
-          })}
+          defaultOpen:
+            defaultOpenWhenUncontrolled ?? TOOL_UI_CONFIG.DEFAULT_OPEN,
+        })}
       variant={variant}
       className={cn(
         'animate-in fade-in slide-in-from-bottom-2 duration-300 ease-in-out',

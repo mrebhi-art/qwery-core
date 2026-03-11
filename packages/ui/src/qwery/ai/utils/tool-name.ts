@@ -57,6 +57,7 @@ export function getUserFriendlyToolName(
     'tool-readLinkData': 'Read Link Data',
     'tool-api_call': 'API Call',
     'tool-listViews': 'List Views',
+    'tool-webfetch': 'Web search',
   };
 
   let mappedName = nameMap[normalizedType];

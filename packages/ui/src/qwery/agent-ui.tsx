@@ -19,9 +19,16 @@ import {
 } from './ai/message-parts';
 import { StreamdownWithSuggestions } from './ai/streamdown-with-suggestions';
 import {
+  formatMessageDateTime,
+  formatMessageTime,
   UserMessageBubble,
   parseMessageWithContext,
 } from './ai/user-message-bubble';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../shadcn/tooltip';
 import {
   type PromptInputMessage,
   usePromptInputAttachments,
@@ -97,10 +104,14 @@ import {
   SuggestionBadges,
   SuggestionBadgesSkeleton,
 } from './ai/suggestion-badges';
+import { isSearchEngine } from './ai/web-fetch-visualizer';
+import type { SearchEngine } from './ai/web-fetch-visualizer';
 export interface QweryAgentUIProps {
   initialMessages?: UIMessage[];
   transport: (model: string) => ChatTransport<UIMessage>;
   models: { name: string; value: string }[];
+  allModels?: { name: string; value: string }[];
+  onModelsChange?: (enabledModels: { name: string; value: string }[]) => void;
   onOpen?: () => void;
   usage?: QweryContextProps;
   emitFinish?: () => void;
@@ -152,6 +163,8 @@ export interface QweryAgentUIProps {
     text: string,
     metadata?: import('./ai/utils/suggestion-pattern').SuggestionMetadata,
   ) => Promise<boolean>;
+  preferredSearchEngine?: SearchEngine;
+  onPreferredSearchEngineChange?: (engine: SearchEngine) => void;
 }
 
 type UseChatTransport = NonNullable<
@@ -190,6 +203,8 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
     initialMessages,
     transport,
     models,
+    allModels,
+    onModelsChange,
     onOpen,
     usage,
     emitFinish,
@@ -213,6 +228,8 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
     onDatasourceNameClick,
     onTableNameClick,
     getDatasourceTooltip,
+    preferredSearchEngine: preferredSearchEngineProp,
+    onPreferredSearchEngineChange,
   } = props;
 
   const notebookContextRef = useRef(notebookContext);
@@ -258,11 +275,28 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
     }
   }, [onOpen]);
 
-  const [state, setState] = useState({
-    input: '',
-    model: models[0]?.value ?? '',
-    webSearch: false,
+  const [state, setState] = useState(() => {
+    let webSearch = false;
+    if (typeof window !== 'undefined') {
+      try {
+        webSearch = localStorage.getItem('qwery-web-search-enabled') === 'true';
+      } catch {
+        /* ignore */
+      }
+    }
+    return {
+      input: '',
+      model: models[0]?.value ?? '',
+      webSearch,
+    };
   });
+
+  const modelIds = useMemo(() => new Set(models.map((m) => m.value)), [models]);
+  useEffect(() => {
+    if (!modelIds.has(state.model) && models.length > 0) {
+      setState((prev) => ({ ...prev, model: models[0]!.value }));
+    }
+  }, [modelIds, state.model, models]);
 
   const [showSuggestionBadges, setShowSuggestionBadges] = useState(() => {
     if (typeof window === 'undefined') return true;
@@ -285,6 +319,38 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
       /* ignore */
     }
   }, [showSuggestionBadges]);
+
+  const [preferredSearchEngine, setPreferredSearchEngine] =
+    useState<SearchEngine>(() => {
+      if (typeof window === 'undefined') return 'google';
+      try {
+        const v = localStorage.getItem('qwery-preferred-search-engine');
+        return v && isSearchEngine(v) ? v : 'google';
+      } catch {
+        return 'google';
+      }
+    });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(
+        'qwery-preferred-search-engine',
+        preferredSearchEngine,
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [preferredSearchEngine]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('qwery-web-search-enabled', String(state.webSearch));
+    } catch {
+      /* ignore */
+    }
+  }, [state.webSearch]);
 
   const transportInstance = useMemo(
     () => transport(state.model),
@@ -1071,11 +1137,63 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                   </div>
                 </div>
               ) : messages.length === 0 ? (
-                <ConversationEmptyState
-                  title="Start a conversation"
-                  description="Ask me anything and I'll help you out. You can ask questions or get explanations."
-                  icon={<Sparkles className="text-muted-foreground size-12" />}
-                />
+                <div className="flex min-h-full min-w-0 flex-1 flex-col items-center justify-center gap-8 py-8 sm:min-h-[70vh]">
+                  <ConversationEmptyState
+                    title="Start a conversation"
+                    description="Ask me anything and I'll help you out. You can ask questions or get explanations."
+                    icon={<Sparkles className="text-muted-foreground size-12" />}
+                  />
+                  <div className="mx-auto w-full max-w-4xl shrink-0 self-center px-6">
+                    <PromptInputInner
+                      sendMessage={sendMessage}
+                      state={state}
+                      setState={setState}
+                      textareaRef={textareaRef}
+                      status={status}
+                      stop={stop}
+                      setMessages={setMessages}
+                      messages={messages}
+                      models={models}
+                      allModels={allModels}
+                      onModelsChange={onModelsChange}
+                      usage={usage}
+                      datasources={datasources}
+                      selectedDatasources={selectedDatasources}
+                      onDatasourceSelectionChange={onDatasourceSelectionChange}
+                      getDatasourcesForSend={getDatasourcesForSend}
+                      pluginLogoMap={pluginLogoMap}
+                      datasourcesLoading={datasourcesLoading}
+                      scrollToBottomRef={scrollToBottomRef}
+                      showSuggestionBadges={showSuggestionBadges}
+                      onShowSuggestionBadgesChange={setShowSuggestionBadges}
+                      webSearch={state.webSearch}
+                      onWebSearchChange={(v) =>
+                        setState((prev) => ({ ...prev, webSearch: v }))
+                      }
+                      preferredSearchEngine={
+                        preferredSearchEngineProp ?? preferredSearchEngine
+                      }
+                      onPreferredSearchEngineChange={(engine) => {
+                        setPreferredSearchEngine(engine);
+                        onPreferredSearchEngineChange?.(engine);
+                      }}
+                    />
+                  </div>
+                  {(isLoading && initialSuggestions?.length) ||
+                  badgeSuggestions.length > 0 ? (
+                    <div className="flex justify-center">
+                      {isLoading && !badgesFadingOut ? (
+                        <SuggestionBadgesSkeleton />
+                      ) : badgeSuggestions.length > 0 ? (
+                        <SuggestionBadges
+                          suggestions={badgeSuggestions}
+                          onSuggestionClick={handleBadgeSuggestionClick}
+                          disabled={badgesFadingOut || !showSuggestionBadges}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               ) : (
                 <>
                   <VirtuosoMessageList
@@ -1159,13 +1277,65 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                     </div>
                   </div>
                 ) : messages.length === 0 ? (
-                  <ConversationEmptyState
-                    title="Start a conversation"
-                    description="Ask me anything and I'll help you out. You can ask questions or get explanations."
-                    icon={
-                      <Sparkles className="text-muted-foreground size-12" />
-                    }
-                  />
+                  <div className="flex min-h-full min-w-0 flex-1 flex-col items-center justify-center gap-8 py-8 sm:min-h-[70vh]">
+                    <ConversationEmptyState
+                      title="Start a conversation"
+                      description="Ask me anything and I'll help you out. You can ask questions or get explanations."
+                      icon={
+                        <Sparkles className="text-muted-foreground size-12" />
+                      }
+                    />
+                    <div className="mx-auto w-full max-w-4xl shrink-0 self-center px-6">
+                      <PromptInputInner
+                        sendMessage={sendMessage}
+                        state={state}
+                        setState={setState}
+                        textareaRef={textareaRef}
+                        status={status}
+                        stop={stop}
+                        setMessages={setMessages}
+                        messages={messages}
+                        models={models}
+                        allModels={allModels}
+                        onModelsChange={onModelsChange}
+                        usage={usage}
+                        datasources={datasources}
+                        selectedDatasources={selectedDatasources}
+                        onDatasourceSelectionChange={onDatasourceSelectionChange}
+                        getDatasourcesForSend={getDatasourcesForSend}
+                        pluginLogoMap={pluginLogoMap}
+                        datasourcesLoading={datasourcesLoading}
+                        scrollToBottomRef={scrollToBottomRef}
+                        showSuggestionBadges={showSuggestionBadges}
+                        onShowSuggestionBadgesChange={setShowSuggestionBadges}
+                        webSearch={state.webSearch}
+                        onWebSearchChange={(v) =>
+                          setState((prev) => ({ ...prev, webSearch: v }))
+                        }
+                        preferredSearchEngine={
+                          preferredSearchEngineProp ?? preferredSearchEngine
+                        }
+                        onPreferredSearchEngineChange={(engine) => {
+                          setPreferredSearchEngine(engine);
+                          onPreferredSearchEngineChange?.(engine);
+                        }}
+                      />
+                    </div>
+                    {(isLoading && initialSuggestions?.length) ||
+                    badgeSuggestions.length > 0 ? (
+                      <div className="flex justify-center">
+                        {isLoading && !badgesFadingOut ? (
+                          <SuggestionBadgesSkeleton />
+                        ) : badgeSuggestions.length > 0 ? (
+                          <SuggestionBadges
+                            suggestions={badgeSuggestions}
+                            onSuggestionClick={handleBadgeSuggestionClick}
+                            disabled={badgesFadingOut || !showSuggestionBadges}
+                          />
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : (
                   messages.map((message) => {
                     const sourceParts = message.parts.filter(
@@ -1319,7 +1489,7 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                                 <div
                                   key={`${message.id}-${i}`}
                                   className={cn(
-                                    'flex max-w-full min-w-0 items-start gap-3 overflow-x-hidden',
+                                    'group/msg flex max-w-full min-w-0 items-start gap-3 overflow-x-hidden',
                                     normalizeUIRole(message.role) === 'user' &&
                                       'justify-end',
                                     normalizeUIRole(message.role) ===
@@ -1463,6 +1633,7 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                                               );
 
                                             if (context) {
+                                              const createdAt = (message.metadata as Record<string, unknown> | undefined)?.createdAt as Date | string | undefined;
                                               return (
                                                 <div className="group/msg w-full max-w-full min-w-0">
                                                   <UserMessageBubble
@@ -1481,7 +1652,22 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                                                     isLastUserMessage={
                                                       isLastUserMessage
                                                     }
+                                                    timestamp={createdAt}
                                                   />
+                                                  {createdAt != null && isLastTextPart && (
+                                                    <div className="mt-1 flex justify-end opacity-0 transition-opacity group-hover/msg:opacity-100">
+                                                      <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                          <span className="text-muted-foreground cursor-default text-xs">
+                                                            {formatMessageTime(createdAt)}
+                                                          </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="top">
+                                                          {formatMessageDateTime(createdAt)}
+                                                        </TooltipContent>
+                                                      </Tooltip>
+                                                    </div>
+                                                  )}
                                                 </div>
                                               );
                                             }
@@ -1532,7 +1718,7 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                                                 className="w-full max-w-full min-w-0"
                                               >
                                                 <MessageContent className="max-w-full min-w-0 overflow-x-hidden">
-                                                  <div className="overflow-wrap-anywhere wrap-break-words inline-flex min-w-0 items-baseline gap-0.5">
+                                                  <div className="overflow-wrap-anywhere wrap-break-words flex min-w-0 flex-wrap items-baseline gap-x-0.5 gap-y-1">
                                                     <StreamdownWithSuggestions
                                                       sendMessage={sendMessage}
                                                       messages={messages}
@@ -1567,7 +1753,7 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                                                 className="w-full max-w-full min-w-0"
                                               >
                                                 <MessageContent className="max-w-full min-w-0 overflow-x-hidden">
-                                                  <div className="overflow-wrap-anywhere inline-flex min-w-0 items-baseline gap-0.5 break-words">
+                                                  <div className="overflow-wrap-anywhere flex min-w-0 flex-wrap items-baseline gap-x-0.5 gap-y-1 break-words">
                                                     <StreamdownWithSuggestions
                                                       sendMessage={sendMessage}
                                                       messages={messages}
@@ -1610,6 +1796,19 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                                                 'user' && 'justify-end',
                                             )}
                                           >
+                                            {normalizeUIRole(message.role) === 'user' &&
+                                              (message.metadata as Record<string, unknown> | undefined)?.createdAt != null && (
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <span className="text-muted-foreground text-xs opacity-0 transition-opacity group-hover/msg:opacity-100">
+                                                      {formatMessageTime((message.metadata as Record<string, unknown>).createdAt as Date | string)}
+                                                    </span>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent side="top">
+                                                    {formatMessageDateTime((message.metadata as Record<string, unknown>).createdAt as Date | string)}
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              )}
                                             {message.role === 'assistant' && (
                                               <Button
                                                 variant="ghost"
@@ -1773,7 +1972,7 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
                           className="w-full max-w-full min-w-0"
                         >
                           <MessageContent className="max-w-full min-w-0 overflow-x-hidden">
-                            <div className="overflow-wrap-anywhere inline-flex min-w-0 items-baseline gap-0.5 break-words">
+                            <div className="overflow-wrap-anywhere flex min-w-0 flex-wrap items-baseline gap-x-0.5 gap-y-1 break-words">
                               <MessageResponse></MessageResponse>
                             </div>
                           </MessageContent>
@@ -1791,12 +1990,9 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
           )}
         </div>
 
+        {messages.length > 0 && (
         <div className="bg-background border-border/10 relative z-40 shrink-0 border-t">
-          {(messages.length === 0 &&
-            ((isLoading && initialSuggestions?.length) ||
-              badgeSuggestions.length > 0)) ||
-          lastMessageHasSuggestions ||
-          badgesFadingOut ? (
+          {lastMessageHasSuggestions || badgesFadingOut ? (
             <div
               className={cn(
                 'absolute right-0 bottom-full left-0 z-50 flex justify-center pb-3 transition-all duration-300 ease-out',
@@ -1837,6 +2033,8 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
               setMessages={setMessages}
               messages={messages}
               models={models}
+              allModels={allModels}
+              onModelsChange={onModelsChange}
               usage={usage}
               datasources={datasources}
               selectedDatasources={selectedDatasources}
@@ -1847,9 +2045,21 @@ function QweryAgentUIContent(props: QweryAgentUIProps) {
               scrollToBottomRef={scrollToBottomRef}
               showSuggestionBadges={showSuggestionBadges}
               onShowSuggestionBadgesChange={setShowSuggestionBadges}
+              webSearch={state.webSearch}
+              onWebSearchChange={(v) =>
+                setState((prev) => ({ ...prev, webSearch: v }))
+              }
+              preferredSearchEngine={
+                preferredSearchEngineProp ?? preferredSearchEngine
+              }
+              onPreferredSearchEngineChange={(engine) => {
+                setPreferredSearchEngine(engine);
+                onPreferredSearchEngineChange?.(engine);
+              }}
             />
           </div>
         </div>
+        )}
       </div>
 
       <AlertDialog
@@ -1918,6 +2128,8 @@ function PromptInputInner({
   setMessages: _setMessages,
   messages: _messages,
   models,
+  allModels = models,
+  onModelsChange,
   usage,
   datasources,
   selectedDatasources,
@@ -1928,6 +2140,10 @@ function PromptInputInner({
   scrollToBottomRef,
   showSuggestionBadges,
   onShowSuggestionBadgesChange,
+  webSearch,
+  onWebSearchChange,
+  preferredSearchEngine,
+  onPreferredSearchEngineChange,
 }: {
   sendMessage: ReturnType<typeof useChat>['sendMessage'];
   state: { input: string; model: string; webSearch: boolean };
@@ -1940,6 +2156,8 @@ function PromptInputInner({
   setMessages: ReturnType<typeof useChat>['setMessages'];
   messages: ReturnType<typeof useChat>['messages'];
   models: { name: string; value: string }[];
+  allModels?: { name: string; value: string }[];
+  onModelsChange?: (enabledModels: { name: string; value: string }[]) => void;
   usage?: QweryContextProps;
   datasources?: DatasourceItem[];
   selectedDatasources?: string[];
@@ -1950,6 +2168,10 @@ function PromptInputInner({
   scrollToBottomRef: React.RefObject<(() => void) | null>;
   showSuggestionBadges?: boolean;
   onShowSuggestionBadgesChange?: (value: boolean) => void;
+  webSearch?: boolean;
+  onWebSearchChange?: (value: boolean) => void;
+  preferredSearchEngine?: SearchEngine;
+  onPreferredSearchEngineChange?: (engine: SearchEngine) => void;
 }) {
   const attachments = usePromptInputAttachments();
 
@@ -2022,6 +2244,8 @@ function PromptInputInner({
       model={state.model}
       setModel={(model) => setState((prev) => ({ ...prev, model }))}
       models={models}
+      allModels={allModels}
+      onModelsChange={onModelsChange}
       status={status}
       textareaRef={textareaRef}
       onStop={handleStop}
@@ -2035,6 +2259,10 @@ function PromptInputInner({
       datasourcesLoading={datasourcesLoading}
       showSuggestionBadges={showSuggestionBadges}
       onShowSuggestionBadgesChange={onShowSuggestionBadgesChange}
+      webSearch={webSearch}
+      onWebSearchChange={onWebSearchChange}
+      preferredSearchEngine={preferredSearchEngine}
+      onPreferredSearchEngineChange={onPreferredSearchEngineChange}
     />
   );
 }

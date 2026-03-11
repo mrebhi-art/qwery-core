@@ -40,6 +40,7 @@ export interface UserMessageBubbleProps {
   pluginLogoMap?: Map<string, string>;
   onEditStart?: (text: string, datasourceIds: string[]) => void;
   isLastUserMessage?: boolean;
+  timestamp?: Date | string;
 }
 
 /**
@@ -267,9 +268,18 @@ function getPreviewText(
   response: string,
   suggestionText: string,
 ): { preview: React.ReactNode; fullText: string } {
-  // Always show the suggestion text in bold (mandatory)
-  // Try to find and spotlight the suggestion within the response
-  const spotlight = findSuggestionInResponse(response, suggestionText);
+  const fullText = cleanSuggestionsForDisplay(response);
+  const cleanedResponse = fullText
+    .replace(/#{1,6}\s+/g, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`(.*?)`/g, '$1')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\n+/g, ' ')
+    .trim();
+
+  const spotlight = findSuggestionInResponse(cleanedResponse, suggestionText);
 
   if (spotlight) {
     const { before, suggestion, after } = spotlight;
@@ -282,29 +292,17 @@ function getPreviewText(
       </>
     );
 
-    return { preview, fullText: cleanSuggestionsForDisplay(response) };
+    return { preview, fullText };
   }
-
-  // Fallback: if suggestion not found in response, show the suggestion text itself in bold
-  // Then show surrounding text from response
-  const cleanResponse = response
-    .replace(/#{1,6}\s+/g, '')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/`(.*?)`/g, '$1')
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/\n+/g, ' ')
-    .trim();
 
   const preview = (
     <>
       <span className="font-bold">{suggestionText}</span>
-      {cleanResponse && <span> {cleanResponse}</span>}
+      {cleanedResponse && <span> {cleanedResponse}</span>}
     </>
   );
 
-  return { preview, fullText: cleanSuggestionsForDisplay(response) };
+  return { preview, fullText };
 }
 
 function getUserQuestionFromParentId(
@@ -382,6 +380,24 @@ function getUserQuestionFromParentId(
   return undefined;
 }
 
+export function formatMessageTime(value: Date | string): string {
+  const d = typeof value === 'string' ? new Date(value) : value;
+  return d.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+export function formatMessageDateTime(value: Date | string): string {
+  const d = typeof value === 'string' ? new Date(value) : value;
+  return d.toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    hour12: true,
+  });
+}
+
 export function UserMessageBubble({
   text,
   context,
@@ -393,6 +409,7 @@ export function UserMessageBubble({
   pluginLogoMap,
   onEditStart: _onEditStart,
   isLastUserMessage = false,
+  timestamp,
 }: UserMessageBubbleProps) {
   const hasContext = context && context.lastAssistantResponse;
   const hasSourceSuggestion = context?.sourceSuggestionId;
@@ -497,7 +514,7 @@ export function UserMessageBubble({
         </div>
       )}
       {/* Horizontal layout: go to suggestion button - previous response preview - message bubble */}
-      <div className="flex w-full max-w-full min-w-0 items-center gap-2 overflow-x-hidden">
+      <div className="flex w-full max-w-full min-w-0 items-center gap-1 overflow-x-hidden">
         {/* Go to suggestion button - on the very left */}
         {hasSourceSuggestion && (
           <Button
@@ -510,12 +527,12 @@ export function UserMessageBubble({
             <ArrowUpLeft className="size-4" />
           </Button>
         )}
-        {/* Previous response preview - fills available space */}
+        {/* Previous response preview - sits next to bubble, full text wraps without truncation */}
         {previewData && (
           <HoverCard open={isHoverCardOpen} onOpenChange={setIsHoverCardOpen}>
             <HoverCardTrigger asChild>
-              <div className="text-muted-foreground hover:text-foreground flex min-w-0 flex-1 cursor-pointer items-center text-xs leading-relaxed transition-colors">
-                <span className="line-clamp-2 break-words">
+              <div className="text-muted-foreground hover:text-foreground flex min-w-0 max-w-[65%] shrink-0 cursor-pointer items-center justify-end text-right text-xs leading-relaxed transition-colors">
+                <span className="break-words">
                   {previewData.preview}
                 </span>
               </div>
@@ -560,10 +577,10 @@ export function UserMessageBubble({
             </HoverCardContent>
           </HoverCard>
         )}
-        {/* Message bubble - fills remaining space */}
+        {/* Message bubble - right-aligned, sits next to preview */}
         <Message
           from="user"
-          className={cn('flex !w-auto min-w-0 flex-1', className)}
+          className={cn('flex !w-auto min-w-0 shrink-0', className)}
         >
           <MessageContent
             className="overflow-wrap-anywhere max-w-full min-w-0 break-words"

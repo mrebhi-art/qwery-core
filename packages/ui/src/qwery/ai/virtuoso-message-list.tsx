@@ -346,7 +346,7 @@ export const VirtuosoMessageList = forwardRef<
                       className="w-full max-w-full min-w-0"
                     >
                       <MessageContent className="max-w-full min-w-0 overflow-x-hidden">
-                        <div className="overflow-wrap-anywhere inline-flex min-w-0 items-baseline gap-0.5 break-words">
+                        <div className="overflow-wrap-anywhere flex min-w-0 flex-wrap items-baseline gap-x-0.5 gap-y-1 break-words">
                           <MessageResponse></MessageResponse>
                         </div>
                       </MessageContent>

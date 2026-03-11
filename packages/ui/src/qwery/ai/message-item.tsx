@@ -19,6 +19,11 @@ import {
   Archive as ArchiveIcon,
 } from 'lucide-react';
 import { Message, MessageContent } from '../../ai-elements/message';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../../shadcn/tooltip';
 import { normalizeUIRole } from '@qwery/shared/message-role-utils';
 import {
   Source,
@@ -29,6 +34,8 @@ import {
 import { ReasoningPart } from './message-parts';
 import { StreamdownWithSuggestions } from './streamdown-with-suggestions';
 import {
+  formatMessageDateTime,
+  formatMessageTime,
   UserMessageBubble,
   parseMessageWithContext,
 } from './user-message-bubble';
@@ -576,11 +583,29 @@ function MessageItemComponent({
                                             isLastUserMessage={
                                               isLastUserMessage
                                             }
+                                            timestamp={
+                                              (message.metadata as Record<string, unknown> | undefined)?.createdAt as
+                                                | Date
+                                                | string
+                                                | undefined
+                                            }
                                           />
                                           {isLastTextPart && (
-                                            <div className="mt-1 flex items-center justify-end gap-1">
-                                              {!isChatActive(status) && (
-                                                <Button
+                                              <div className="mt-1 flex items-center justify-end gap-1">
+                                                {(message.metadata as Record<string, unknown> | undefined)?.createdAt != null && (
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <span className="text-muted-foreground text-xs opacity-0 transition-opacity group-hover/msg:opacity-100">
+                                                        {formatMessageTime((message.metadata as Record<string, unknown>).createdAt as Date | string)}
+                                                      </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="top">
+                                                      {formatMessageDateTime((message.metadata as Record<string, unknown>).createdAt as Date | string)}
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                )}
+                                                {!isChatActive(status) && (
+                                                  <Button
                                                   variant="ghost"
                                                   size="icon"
                                                   onClick={() =>
@@ -664,7 +689,7 @@ function MessageItemComponent({
                                             className="w-full max-w-full min-w-0"
                                           >
                                             <MessageContent className="max-w-full min-w-0 overflow-x-hidden">
-                                              <div className="overflow-wrap-anywhere inline-flex min-w-0 items-baseline gap-0.5 break-words">
+                                              <div className="overflow-wrap-anywhere flex min-w-0 flex-wrap items-baseline gap-x-0.5 gap-y-1 break-words">
                                                 {part.text}
                                               </div>
                                             </MessageContent>
@@ -673,7 +698,19 @@ function MessageItemComponent({
                                           {normalizeUIRole(message.role) ===
                                             'user' &&
                                             isLastTextPart && (
-                                              <div className="mt-1 flex items-center justify-end gap-1">
+                                              <div className="mr-2 mt-1 flex items-center justify-end gap-1">
+                                                {(message.metadata as Record<string, unknown> | undefined)?.createdAt != null && (
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <span className="text-muted-foreground text-xs opacity-0 transition-opacity group-hover/msg:opacity-100">
+                                                        {formatMessageTime((message.metadata as Record<string, unknown>).createdAt as Date | string)}
+                                                      </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="top">
+                                                      {formatMessageDateTime((message.metadata as Record<string, unknown>).createdAt as Date | string)}
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                )}
                                                 {!isChatActive(status) && (
                                                   <Button
                                                     variant="ghost"
@@ -742,7 +779,7 @@ function MessageItemComponent({
                                         className="w-full max-w-full min-w-0"
                                       >
                                         <MessageContent className="max-w-full min-w-0 overflow-x-hidden">
-                                          <div className="overflow-wrap-anywhere inline-flex min-w-0 items-baseline gap-0.5 break-words">
+                                          <div className="overflow-wrap-anywhere flex min-w-0 flex-wrap items-baseline gap-x-0.5 gap-y-1 break-words">
                                             <StreamdownWithSuggestions
                                               sendMessage={sendMessage}
                                               messages={messages}
@@ -774,7 +811,7 @@ function MessageItemComponent({
                                         className="w-full max-w-full min-w-0"
                                       >
                                         <MessageContent className="max-w-full min-w-0 overflow-x-hidden">
-                                          <div className="overflow-wrap-anywhere inline-flex min-w-0 items-baseline gap-0.5 break-words">
+                                          <div className="overflow-wrap-anywhere flex min-w-0 flex-wrap items-baseline gap-x-0.5 gap-y-1 break-words">
                                             <StreamdownWithSuggestions
                                               sendMessage={sendMessage}
                                               messages={messages}

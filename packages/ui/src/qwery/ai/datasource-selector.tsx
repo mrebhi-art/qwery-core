@@ -280,7 +280,7 @@ export function DatasourceSelector({
         )}
       </PopoverTrigger>
       <PopoverContent
-        className="border-border bg-popover z-[101] w-[260px] overflow-hidden rounded-lg border p-0 shadow-xl"
+        className="border-border bg-popover z-[101] w-[340px] overflow-hidden rounded-lg border p-0 shadow-xl"
         align="start"
         sideOffset={8}
       >
@@ -308,7 +308,7 @@ export function DatasourceSelector({
               </div>
             }
           />
-          <CommandList className="max-h-[260px] overflow-x-hidden overflow-y-auto p-1">
+          <CommandList className="max-h-[340px] overflow-x-hidden overflow-y-auto p-1">
             {isLoading ? (
               <div className="space-y-1.5 p-2">
                 <Skeleton className="h-8 w-full rounded" />

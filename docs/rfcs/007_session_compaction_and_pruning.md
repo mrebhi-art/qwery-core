@@ -98,7 +98,6 @@ flowchart TD
 
 Some tools are never pruned:
 - **`skill`** tool - Protected by name
-- Tools with `type` starting with `'tool-'` prefix - Protected by prefix
 - Parts already marked with `compactedAt` - Protected by marker
 
 ### Prunable States
@@ -113,10 +112,10 @@ Tool parts are only pruned if they're in a completed state:
 Token estimation uses a simple formula:
 
 ```
-tokens = min(ceil(text.length / 4), 50_000)
+tokens = min(ceil(text.length / 3.6), 50_000)
 ```
 
-The `/4` ratio approximates tokens (most tokens are ~4 characters). The 50k cap prevents wild over-estimation when large objects are JSON-stringified.
+The `/3.6` ratio approximates tokens (based on empirical averages across providers). The 50k cap prevents wild over-estimation when large objects are JSON-stringified.
 
 ## Message Filtering
 

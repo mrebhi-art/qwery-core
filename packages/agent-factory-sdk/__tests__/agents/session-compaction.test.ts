@@ -13,7 +13,11 @@ import {
   UsageRepository,
   TodoRepository,
 } from '@qwery/repository-in-memory';
-import { prune } from '../../src/agents/session-compaction';
+import {
+  __test__,
+  isOverflow,
+  prune,
+} from '../../src/agents/session-compaction';
 
 function createRepositories(): Repositories {
   return {
@@ -361,5 +365,111 @@ describe('SessionCompaction prune', () => {
     await prune({ conversationSlug: CONV_SLUG, repositories });
 
     expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips pruning when total prunable tokens are below minimum threshold', async () => {
+    await repositories.conversation.create(makeConversation());
+    const base = new Date(1000);
+    // User0 (0), Asst0 with small tool output (1), User1 (2)
+    // smallOutput length chosen so estimated tokens stay below PRUNE_MINIMUM.
+    const smallOutput = 'x'.repeat(50_000);
+    await repositories.message.create(
+      makeMessage(
+        'msg-user-0',
+        MessageRole.USER,
+        { parts: [{ type: 'text', text: 'zeroth' }] },
+        new Date(base.getTime()),
+      ),
+    );
+    await repositories.message.create(
+      makeMessage(
+        'msg-asst-0',
+        MessageRole.ASSISTANT,
+        {
+          parts: [
+            { type: 'step-start' },
+            {
+              type: 'tool-runQuery',
+              state: 'output-available',
+              output: { result: smallOutput },
+            },
+          ],
+        },
+        new Date(base.getTime() + 1),
+      ),
+    );
+    await repositories.message.create(
+      makeMessage(
+        'msg-user-1',
+        MessageRole.USER,
+        { parts: [{ type: 'text', text: 'first' }] },
+        new Date(base.getTime() + 2),
+      ),
+    );
+
+    const updateSpy = vi.spyOn(repositories.message, 'update');
+    await prune({ conversationSlug: CONV_SLUG, repositories });
+
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('SessionCompaction helpers', () => {
+  it('estimateTokens approximates length with 3.6 divisor and caps at 50k', () => {
+    const { estimateTokens } = __test__;
+    expect(estimateTokens('')).toBe(0);
+    expect(estimateTokens('abcd')).toBeGreaterThanOrEqual(1);
+    const longText = 'x'.repeat(400_000);
+    expect(estimateTokens(longText)).toBe(50_000);
+  });
+
+  it('truncateSummaryByTokens respects max token budget and stops on boundaries', () => {
+    const { estimateTokens, truncateSummaryByTokens } = __test__;
+    const sentences = [
+      'Sentence one. ',
+      'Sentence two with more words. ',
+      'Sentence three is even longer than the previous ones. ',
+      'Sentence four should be cut off when tokens exceed the limit. ',
+    ];
+    const full = sentences.join('\n');
+    const maxTokens = 10;
+    const truncated = truncateSummaryByTokens(full, maxTokens);
+    const truncatedTokens = estimateTokens(truncated);
+    const fullTokens = estimateTokens(full);
+    expect(truncatedTokens).toBeLessThanOrEqual(maxTokens);
+    expect(fullTokens).toBeGreaterThan(maxTokens);
+    // Should not be empty when there is content
+    expect(truncated.length).toBeGreaterThan(0);
+  });
+
+  it('isOverflow returns true only when token count exceeds usable budget', async () => {
+    const model = {
+      providerID: 'test',
+      id: 'test-model',
+      limit: { context: 100, output: 20 },
+    } as const;
+    const below = await isOverflow({
+      tokens: {
+        input: 40,
+        output: 10,
+        reasoning: 0,
+        cache: { read: 10, write: 0 },
+      },
+      model,
+    });
+    // usable = context - output = 80, promptCount = 50
+    expect(below).toBe(false);
+
+    const above = await isOverflow({
+      tokens: {
+        input: 71,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 10, write: 0 },
+      },
+      model,
+    });
+    // usable = 80, promptCount = 81
+    expect(above).toBe(true);
   });
 });

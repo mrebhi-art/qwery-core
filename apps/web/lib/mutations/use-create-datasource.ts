@@ -11,13 +11,7 @@ import {
   getDatasourcesByProjectIdKey,
   getDatasourcesKey,
 } from '~/lib/queries/use-get-datasources';
-
-function isDatasourceMetadataQuery(
-  queryKey: readonly unknown[],
-  datasourceId: string,
-) {
-  return queryKey[0] === 'datasource-metadata' && queryKey[3] === datasourceId;
-}
+import { datasourceMetadataKeys } from '~/lib/queries/datasource-metadata-keys';
 
 export function useCreateDatasource(
   datasourceRepository: IDatasourceRepository,
@@ -43,7 +37,7 @@ export function useCreateDatasource(
         }),
         queryClient.removeQueries({
           predicate: ({ queryKey }) =>
-            isDatasourceMetadataQuery(queryKey, datasourceOutput.id),
+            datasourceMetadataKeys.isDetailOf(queryKey, datasourceOutput.id),
         }),
       ]);
       onSuccess(datasourceOutput as unknown as Datasource);

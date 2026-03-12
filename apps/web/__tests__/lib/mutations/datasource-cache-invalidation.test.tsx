@@ -10,7 +10,7 @@ import {
   getDatasourcesByProjectIdKey,
   getDatasourcesKey,
 } from '~/lib/queries/use-get-datasources';
-import { getDatasourceMetadataKey } from '~/lib/queries/use-get-datasource-metadata';
+import { datasourceMetadataKeys } from '~/lib/queries/datasource-metadata-keys';
 
 const createExecute = vi.fn();
 const updateExecute = vi.fn();
@@ -40,11 +40,19 @@ function createWrapper(client: QueryClient) {
 
 function seedMetadataQueries(queryClient: QueryClient, datasourceId: string) {
   queryClient.setQueryData(
-    getDatasourceMetadataKey('postgresql', 'postgresql.default', datasourceId),
+    datasourceMetadataKeys.detail(
+      'postgresql',
+      'postgresql.default',
+      datasourceId,
+    ),
     { tables: ['fresh-me'] },
   );
   queryClient.setQueryData(
-    getDatasourceMetadataKey('postgresql', 'postgresql.default', 'other-id'),
+    datasourceMetadataKeys.detail(
+      'postgresql',
+      'postgresql.default',
+      'other-id',
+    ),
     { tables: ['keep-me'] },
   );
 }
@@ -92,14 +100,18 @@ describe('datasource metadata cache invalidation', () => {
     await waitFor(() => {
       expect(
         queryClient.getQueryData(
-          getDatasourceMetadataKey('postgresql', 'postgresql.default', 'ds-1'),
+          datasourceMetadataKeys.detail(
+            'postgresql',
+            'postgresql.default',
+            'ds-1',
+          ),
         ),
       ).toBeUndefined();
     });
 
     expect(
       queryClient.getQueryData(
-        getDatasourceMetadataKey(
+        datasourceMetadataKeys.detail(
           'postgresql',
           'postgresql.default',
           'other-id',
@@ -133,7 +145,11 @@ describe('datasource metadata cache invalidation', () => {
     await waitFor(() => {
       expect(
         queryClient.getQueryData(
-          getDatasourceMetadataKey('postgresql', 'postgresql.default', 'ds-2'),
+          datasourceMetadataKeys.detail(
+            'postgresql',
+            'postgresql.default',
+            'ds-2',
+          ),
         ),
       ).toBeUndefined();
     });
@@ -156,7 +172,11 @@ describe('datasource metadata cache invalidation', () => {
     await waitFor(() => {
       expect(
         queryClient.getQueryData(
-          getDatasourceMetadataKey('postgresql', 'postgresql.default', 'ds-3'),
+          datasourceMetadataKeys.detail(
+            'postgresql',
+            'postgresql.default',
+            'ds-3',
+          ),
         ),
       ).toBeUndefined();
     });

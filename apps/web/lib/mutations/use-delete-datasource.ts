@@ -6,13 +6,7 @@ import {
   getDatasourcesByProjectIdKey,
   getDatasourcesKey,
 } from '~/lib/queries/use-get-datasources';
-
-function isDatasourceMetadataQuery(
-  queryKey: readonly unknown[],
-  datasourceId: string,
-) {
-  return queryKey[0] === 'datasource-metadata' && queryKey[3] === datasourceId;
-}
+import { datasourceMetadataKeys } from '~/lib/queries/datasource-metadata-keys';
 
 export function useDeleteDatasource(
   datasourceRepository: IDatasourceRepository,
@@ -43,7 +37,8 @@ export function useDeleteDatasource(
             })
           : Promise.resolve(),
         queryClient.removeQueries({
-          predicate: ({ queryKey }) => isDatasourceMetadataQuery(queryKey, id),
+          predicate: ({ queryKey }) =>
+            datasourceMetadataKeys.isDetailOf(queryKey, id),
         }),
       ]);
       onSuccess();

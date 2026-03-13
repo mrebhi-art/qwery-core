@@ -534,7 +534,7 @@ export function UserMessageBubble({
             <HoverCardTrigger asChild>
               <button
                 type="button"
-                className="text-muted-foreground hover:text-foreground relative flex max-w-[65%] min-w-0 cursor-pointer self-stretch overflow-hidden items-start justify-end border-0 bg-transparent p-0 text-right text-xs leading-relaxed transition-colors [mask-image:linear-gradient(to_bottom,black_60%,transparent_100%)]"
+                className="text-muted-foreground hover:text-foreground relative flex max-w-[65%] min-w-0 cursor-pointer items-start justify-end self-stretch overflow-hidden border-0 bg-transparent [mask-image:linear-gradient(to_bottom,black_60%,transparent_100%)] p-0 text-right text-xs leading-relaxed transition-colors"
                 onClick={
                   hasSourceSuggestion ? scrollToSourceSuggestion : undefined
                 }

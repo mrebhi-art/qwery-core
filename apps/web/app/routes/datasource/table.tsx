@@ -38,7 +38,10 @@ export async function loader(args: Route.LoaderArgs) {
 export default function TablePage(props: Route.ComponentProps) {
   const params = useParams();
   const slug = params.slug as string;
-  const tableId = params.id as string;
+  const schemaParam = params.schema as string;
+  const tableNameParam = params.tableName as string;
+  const schema = schemaParam ? decodeURIComponent(schemaParam) : '';
+  const tableName = tableNameParam ? decodeURIComponent(tableNameParam) : '';
   const { t } = useTranslation();
   const { datasource } = props.loaderData;
 
@@ -47,18 +50,25 @@ export default function TablePage(props: Route.ComponentProps) {
   });
 
   const table = useMemo(() => {
-    if (!metadata?.tables) return null;
+    if (!metadata?.tables || !schema || !tableName) return null;
     const tables = metadata.tables as Table[];
-    return tables.find((t) => t.id.toString() === tableId) || null;
-  }, [metadata, tableId]);
+    return (
+      tables.find(
+        (t) => (t.schema ?? 'main') === schema && t.name === tableName,
+      ) ?? null
+    );
+  }, [metadata, schema, tableName]);
 
   const columns = useMemo(() => {
     if (!metadata?.columns || !table) return [];
     const allColumns = metadata.columns as Column[];
     return allColumns.filter(
-      (col) => col.table_id.toString() === tableId && col.table === table.name,
+      (col) =>
+        col.table_id === table.id &&
+        col.table === table.name &&
+        (col.schema ?? 'main') === (table.schema ?? 'main'),
     );
-  }, [metadata, table, tableId]);
+  }, [metadata, table]);
 
   const columnListItems: ColumnListItem[] = useMemo(() => {
     return columns.map((col) => ({
@@ -72,11 +82,7 @@ export default function TablePage(props: Route.ComponentProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <p className="text-muted-foreground text-sm">
-          {t('datasource.table.loading', {
-            defaultValue: 'Loading table...',
-          })}
-        </p>
+        <div className="bg-muted h-6 w-24 animate-pulse rounded" />
       </div>
     );
   }
@@ -93,7 +99,6 @@ export default function TablePage(props: Route.ComponentProps) {
     );
   }
 
-  const tableName = table.name;
   const tablesPath = `/ds/${slug}/tables`;
 
   return (
@@ -104,7 +109,7 @@ export default function TablePage(props: Route.ComponentProps) {
             defaultValue: 'Tables',
           })}
         </Link>{' '}
-        <span className="text-muted-foreground">&gt;</span> {tableName}
+        <span className="text-muted-foreground">&gt;</span> {table.name}
       </h1>
       <Columns columns={columnListItems} />
     </div>

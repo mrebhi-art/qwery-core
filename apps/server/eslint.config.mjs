@@ -6,6 +6,7 @@ export default [
     files: ['scripts/**/*.cjs'],
     languageOptions: {
       globals: {
+        console: 'readonly',
         require: 'readonly',
         process: 'readonly',
         __dirname: 'readonly',

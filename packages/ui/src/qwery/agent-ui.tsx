@@ -2229,6 +2229,7 @@ function PromptInputInner({
           },
         },
       );
+
       const scrollToBottom = () => scrollToBottomRef.current?.();
       requestAnimationFrame(scrollToBottom);
       setTimeout(scrollToBottom, 150);

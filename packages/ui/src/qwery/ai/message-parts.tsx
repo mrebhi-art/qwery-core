@@ -1196,7 +1196,7 @@ export function ToolPart({
       let chartExecutionOverride: boolean = false;
 
       // Check top-level output first (expected structure)
-      if (output) {
+      if (output && typeof output === 'object') {
         if ('sqlQuery' in output && typeof output.sqlQuery === 'string') {
           sqlQuery = output.sqlQuery;
         }
@@ -1226,6 +1226,7 @@ export function ToolPart({
 
       const executedFlag =
         output &&
+        typeof output === 'object' &&
         'executed' in output &&
         typeof (output as Record<string, unknown>).executed === 'boolean'
           ? (output as Record<string, unknown>).executed
@@ -1263,6 +1264,7 @@ export function ToolPart({
 
       const exportFilename =
         (output &&
+        typeof output === 'object' &&
         'exportFilename' in output &&
         typeof output.exportFilename === 'string'
           ? output.exportFilename

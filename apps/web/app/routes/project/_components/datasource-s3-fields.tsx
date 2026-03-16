@@ -1,10 +1,9 @@
-'use client';
-
 import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { S3_FORM_SCHEMA } from '~/lib/utils/datasource-form-config';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@qwery/ui/button';
 import {
@@ -41,33 +40,7 @@ const S3_FORMATS = [
   { value: 'json', label: 'JSON' },
 ] as const;
 
-const s3FormSchema = z
-  .object({
-    provider: z.enum(['aws', 'digitalocean', 'minio', 'other']),
-    endpoint_url: z.string().optional(),
-    aws_access_key_id: z.string().min(1, 'Required'),
-    aws_secret_access_key: z.string().min(1, 'Required'),
-    aws_session_token: z.string().optional(),
-    region: z.string().min(1, 'Required'),
-    bucket: z.string().min(1, 'Required'),
-    prefix: z.string().optional(),
-    format: z.enum(['parquet', 'json']),
-    includes: z.array(z.string()).optional(),
-    excludes: z.array(z.string()).optional(),
-  })
-  .refine(
-    (data) =>
-      data.provider === 'aws' ||
-      (data.endpoint_url && data.endpoint_url.trim().length > 0) ||
-      (data.provider === 'digitalocean' && data.region?.trim().length > 0),
-    {
-      message:
-        'Endpoint URL required for non-AWS, or set region for DigitalOcean Spaces',
-      path: ['endpoint_url'],
-    },
-  );
-
-type S3FormValues = z.infer<typeof s3FormSchema>;
+type S3FormValues = z.infer<typeof S3_FORM_SCHEMA>;
 
 const defaultS3Values: S3FormValues = {
   provider: 'aws',
@@ -104,7 +77,7 @@ function SecretKeyInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          autoComplete="new-password"
+          autoComplete="off"
           className="bg-background/50 focus:bg-background pr-10 transition-colors"
         />
         <Button
@@ -141,13 +114,17 @@ export function DatasourceS3Fields({
   onSubmit,
 }: DatasourceS3FieldsProps) {
   const form = useForm<S3FormValues>({
-    resolver: zodResolver(s3FormSchema),
+    resolver: zodResolver(S3_FORM_SCHEMA),
     defaultValues: {
       ...defaultS3Values,
       ...(defaultValues as Partial<S3FormValues> | undefined),
     },
-    mode: 'onTouched',
+    mode: 'onChange',
   });
+
+  useEffect(() => {
+    form.trigger();
+  }, [form]);
 
   const watched = useWatch({ control: form.control });
   const provider = (watched?.provider as string) ?? 'aws';
@@ -166,7 +143,10 @@ export function DatasourceS3Fields({
     onFormReady(cleaned);
   }, [watched, onFormReady, form]);
 
+  const lastValidRef = React.useRef<boolean | null>(null);
   useEffect(() => {
+    if (lastValidRef.current === isValid) return;
+    lastValidRef.current = isValid;
     onValidityChange(isValid);
   }, [isValid, onValidityChange]);
 
@@ -224,6 +204,7 @@ export function DatasourceS3Fields({
                       ? 'https://fra1.digitaloceanspaces.com'
                       : 'https://nyc3.digitaloceanspaces.com'
                   }
+                  autoComplete="off"
                   className="bg-background/50"
                 />
               </FormControl>
@@ -252,6 +233,7 @@ export function DatasourceS3Fields({
                   {...field}
                   value={typeof field.value === 'string' ? field.value : ''}
                   placeholder={isDigitalOcean ? 'qwery' : 'my-bucket'}
+                  autoComplete="off"
                   className="bg-background/50"
                 />
               </FormControl>
@@ -272,6 +254,7 @@ export function DatasourceS3Fields({
                   {...field}
                   value={typeof field.value === 'string' ? field.value : ''}
                   placeholder={isDigitalOcean ? 'fra1' : 'us-east-1'}
+                  autoComplete="off"
                   className="bg-background/50"
                 />
               </FormControl>
@@ -332,6 +315,7 @@ export function DatasourceS3Fields({
                 {...field}
                 value={typeof field.value === 'string' ? field.value : ''}
                 placeholder="folder/ or leave empty"
+                autoComplete="off"
                 className="bg-background/50"
               />
             </FormControl>
@@ -383,6 +367,7 @@ export function DatasourceS3Fields({
                       ? field.value
                       : ''
                 }
+                autoComplete="off"
                 onChange={(e) => {
                   const v = e.target.value.trim();
                   field.onChange(

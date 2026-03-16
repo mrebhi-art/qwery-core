@@ -20,6 +20,7 @@ import {
   useNotebookSidebar,
 } from '~/lib/context/notebook-sidebar-context';
 import { ProjectProvider, ProjectGuard } from '~/lib/context/project-context';
+import { DatasourceAddedFlashProvider } from '~/lib/context/datasource-added-flash-context';
 import { useNotebookSidebarOpenStore } from '~/lib/store/use-notebook-sidebar-open';
 import { ProjectPausedOverlay } from './_components/project-paused-overlay';
 
@@ -227,7 +228,9 @@ function SidebarLayout(props: Route.ComponentProps & React.PropsWithChildren) {
       <ProjectGuard>
         <ProjectPausedOverlay />
         <NotebookSidebarProvider>
-          <SidebarLayoutInner {...props} />
+          <DatasourceAddedFlashProvider>
+            <SidebarLayoutInner {...props} />
+          </DatasourceAddedFlashProvider>
         </NotebookSidebarProvider>
       </ProjectGuard>
     </ProjectProvider>
@@ -241,24 +244,26 @@ function SimpleModeSidebarLayout(
     <ProjectProvider>
       <ProjectGuard>
         <ProjectPausedOverlay />
-        <AgentStatusProvider>
-          <SidebarProvider defaultOpen={true}>
-            <Page>
-              <PageNavigation>
-                <ProjectSidebar />
-              </PageNavigation>
-              <PageFooter>
-                <LayoutFooter />
-              </PageFooter>
-              <div className="flex h-full flex-col">
-                <div className="bg-background w-fit px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
-                  <ProjectBreadcrumb />
+        <DatasourceAddedFlashProvider>
+          <AgentStatusProvider>
+            <SidebarProvider defaultOpen={true}>
+              <Page>
+                <PageNavigation>
+                  <ProjectSidebar />
+                </PageNavigation>
+                <PageFooter>
+                  <LayoutFooter />
+                </PageFooter>
+                <div className="flex h-full flex-col">
+                  <div className="bg-background w-fit px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
+                    <ProjectBreadcrumb />
+                  </div>
+                  <div className="flex-1 overflow-hidden">{props.children}</div>
                 </div>
-                <div className="flex-1 overflow-hidden">{props.children}</div>
-              </div>
-            </Page>
-          </SidebarProvider>
-        </AgentStatusProvider>
+              </Page>
+            </SidebarProvider>
+          </AgentStatusProvider>
+        </DatasourceAddedFlashProvider>
       </ProjectGuard>
     </ProjectProvider>
   );

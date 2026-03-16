@@ -1,17 +1,19 @@
 import { z } from 'zod';
-import { validateDatasourceUrl } from './datasource-utils';
+import {
+  validateDatasourceUrl,
+  isDataFileUrl,
+  isGsheetLikeUrl,
+} from './datasource-utils';
 import type { DatasourceExtensionMeta } from './datasource-utils';
 
-const CONNECTION_STRING_REGEX =
-  /^(postgresql|postgres|mysql):\/\/.+/i;
+const CONNECTION_STRING_REGEX = /^(postgresql|postgres|mysql):\/\/.+/i;
 const HTTP_URL_REGEX = /^https?:\/\/.+/i;
 
 function isValidConnectionString(s: string): boolean {
   const t = s.trim();
   if (!t) return false;
   return (
-    CONNECTION_STRING_REGEX.test(t) ||
-    (HTTP_URL_REGEX.test(t) && t.length > 10)
+    CONNECTION_STRING_REGEX.test(t) || (HTTP_URL_REGEX.test(t) && t.length > 10)
   );
 }
 
@@ -22,6 +24,22 @@ function isValidHttpUrl(s: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isValidHost(value: string): boolean {
+  const t = value.trim();
+  if (!t) return false;
+  if (t.toLowerCase() === 'localhost') return true;
+  const ipv4 =
+    /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(t) &&
+    t.split('.').every((n) => parseInt(n, 10) <= 255);
+  if (ipv4) return true;
+  const hostname =
+    /^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/.test(t) ||
+    /^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(
+      t,
+    );
+  return hostname;
 }
 
 export type ConnectionFieldKind =
@@ -116,10 +134,13 @@ const DEFAULT_FIELD_LABELS: FieldLabels = {
 };
 
 const DEFAULT_INPUT_CONFIG: Partial<Record<DatasourceField, FieldInputConfig>> =
-{
-  port: { type: 'text', inputMode: 'numeric', autoComplete: 'off' },
-  password: { type: 'password', autoComplete: 'new-password' },
-};
+  {
+    host: { autoComplete: 'off' },
+    port: { type: 'text', inputMode: 'numeric', autoComplete: 'off' },
+    database: { autoComplete: 'off' },
+    username: { autoComplete: 'off' },
+    password: { type: 'password', autoComplete: 'off' },
+  };
 
 type ProviderRule = {
   placeholders?: Partial<DatasourceFormPlaceholders>;
@@ -155,7 +176,7 @@ const baseConfigSchema = z.record(z.string(), z.unknown()).and(
   }),
 );
 
-const s3ConfigSchema = z
+export const S3_FORM_SCHEMA = z
   .object({
     provider: z.enum(['aws', 'digitalocean', 'minio', 'other']),
     endpoint_url: stringOrUndefined,
@@ -233,22 +254,24 @@ function normalizeDetails(
   return normalized;
 }
 
+const sqlDetailsRequired = (c: Record<string, unknown>) => {
+  const url = (c.connectionUrl ?? c.connectionString) as string | undefined;
+  if (url && typeof url === 'string' && url.trim().length > 0) return false;
+  return true;
+};
+
 const SQL_RULE: ProviderRule = {
   connectionFieldKind: 'connectionString',
   showDetailsTab: true,
   showConnectionStringTab: true,
   zodSchema: baseConfigSchema
-    .refine(
-      (c) => !!(c.connectionUrl || c.connectionString || c.host),
-      {
-        message: 'Provide a connection URL or host',
-        path: ['connectionUrl'],
-      },
-    )
+    .refine((c) => !!(c.connectionUrl || c.connectionString || c.host), {
+      message: 'Provide a connection URL or host',
+      path: ['connectionUrl'],
+    })
     .refine(
       (c) => {
-        const u =
-          (c.connectionUrl ?? c.connectionString) as string | undefined;
+        const u = (c.connectionUrl ?? c.connectionString) as string | undefined;
         if (!u || typeof u !== 'string' || !u.trim()) return true;
         return isValidConnectionString(u);
       },
@@ -273,10 +296,63 @@ const SQL_RULE: ProviderRule = {
         return host.trim().length > 0;
       },
       { message: 'Host cannot be empty', path: ['host'] },
+    )
+    .refine(
+      (c) => {
+        const host = c.host as string | undefined;
+        if (!host || typeof host !== 'string' || !host.trim()) return true;
+        return isValidHost(host);
+      },
+      {
+        message:
+          'Host must be a valid IP address or hostname (e.g. 192.168.1.1 or db.example.com)',
+        path: ['host'],
+      },
+    )
+    .refine(
+      (c) =>
+        !sqlDetailsRequired(c) ||
+        (typeof c.host === 'string' && c.host.trim().length > 0),
+      { message: 'Host is required', path: ['host'] },
+    )
+    .refine(
+      (c) =>
+        !sqlDetailsRequired(c) ||
+        (typeof c.port === 'string' && c.port.trim().length > 0),
+      { message: 'Port is required', path: ['port'] },
+    )
+    .refine(
+      (c) =>
+        !sqlDetailsRequired(c) ||
+        (typeof c.database === 'string' && c.database.trim().length > 0),
+      { message: 'Database is required', path: ['database'] },
+    )
+    .refine(
+      (c) =>
+        !sqlDetailsRequired(c) ||
+        (typeof c.username === 'string' && c.username.trim().length > 0),
+      { message: 'Username is required', path: ['username'] },
+    )
+    .refine(
+      (c) =>
+        !sqlDetailsRequired(c) ||
+        (typeof c.password === 'string' && c.password.trim().length > 0),
+      { message: 'Password is required', path: ['password'] },
     ),
-  isValid: (v) => !!(v.connectionUrl || v.connectionString || v.host),
+  isValid: (v) => {
+    if (v.connectionUrl || v.connectionString) {
+      const u = (v.connectionUrl ?? v.connectionString) as string | undefined;
+      return !!(u && typeof u === 'string' && u.trim().length > 0);
+    }
+    const h = (v.host as string)?.trim();
+    const p = (v.port as string)?.trim();
+    const d = (v.database as string)?.trim();
+    const u = (v.username as string)?.trim();
+    const pw = (v.password as string)?.trim();
+    return !!(h && p && d && u && pw);
+  },
   getValidationError: () =>
-    'Provide either a connection URL or connection details (host is required)',
+    'Provide either a connection URL or fill all parameters (Host, Port, Database, Username, Password)',
   normalize: (c) =>
     c.connectionUrl ? { connectionUrl: c.connectionUrl } : normalizeDetails(c),
 };
@@ -297,9 +373,7 @@ const API_KEY_RULE: ProviderRule = {
     )
     .refine(
       (c) => {
-        const key = (c as Record<string, unknown>).apiKey as
-          | string
-          | undefined;
+        const key = (c as Record<string, unknown>).apiKey as string | undefined;
         if (!key || typeof key !== 'string') return true;
         return key.trim().length > 0;
       },
@@ -520,19 +594,32 @@ const LEGACY_RULES: Record<string, ProviderRule> = {
       connectionString: 'https://docs.google.com/spreadsheets/d/.../edit#gid=0',
     },
     fieldLabels: { connectionString: 'Shared link' },
-    zodSchema: baseConfigSchema.refine(
-      (c) => {
-        const url = (c.sharedLink || c.url) as string | undefined;
-        if (!url) return false;
-        const meta = EXTENSION_META_FOR_VALIDATION['gsheet-csv'];
-        const { isValid } = validateDatasourceUrl(meta, url);
-        return isValid;
-      },
-      {
-        message: 'Provide a valid Google Sheets shared link',
-        path: ['sharedLink'],
-      },
-    ),
+    zodSchema: baseConfigSchema
+      .refine(
+        (c) => {
+          const url = (c.sharedLink || c.url) as string | undefined;
+          if (!url) return false;
+          const meta = EXTENSION_META_FOR_VALIDATION['gsheet-csv'];
+          const { isValid } = validateDatasourceUrl(meta, url);
+          return isValid;
+        },
+        {
+          message: 'Provide a valid Google Sheets shared link',
+          path: ['sharedLink'],
+        },
+      )
+      .refine(
+        (c) => {
+          const url = (c.sharedLink || c.url) as string | undefined;
+          if (!url) return true;
+          return !isDataFileUrl(url);
+        },
+        {
+          message:
+            'Use a Google Sheets link, not a direct file link (e.g. .json or .csv).',
+          path: ['sharedLink'],
+        },
+      ),
   },
   'json-online': {
     ...credentialRule(
@@ -560,13 +647,11 @@ const LEGACY_RULES: Record<string, ProviderRule> = {
             c.url ||
             c.connectionUrl ||
             c.connectionString) as string | undefined;
-          const meta = EXTENSION_META_FOR_VALIDATION['json-online'];
-          const { isValid } = validateDatasourceUrl(meta, url);
-          return isValid;
+          if (!url || typeof url !== 'string' || !url.trim()) return true;
+          return isValidHttpUrl(url);
         },
         {
-          message:
-            'Please enter a valid URL (must start with http:// or https://)',
+          message: 'URL must start with http:// or https://',
           path: ['url'],
         },
       ),
@@ -596,6 +681,23 @@ const LEGACY_RULES: Record<string, ProviderRule> = {
       connectionString: 'https://example.com/data.csv',
     },
     fieldLabels: { connectionString: 'File URL' },
+    zodSchema: credentialRule(
+      'url',
+      ['url', 'connectionUrl'],
+      'Provide a CSV file URL',
+      { validateHttpUrl: true },
+    ).zodSchema.refine(
+      (c) => {
+        const url = (c.url || c.connectionUrl) as string | undefined;
+        if (!url || typeof url !== 'string' || !url.trim()) return true;
+        return !isGsheetLikeUrl(url);
+      },
+      {
+        message:
+          'This looks like a Google Sheets link. Use the Google Sheets datasource instead.',
+        path: ['url'],
+      },
+    ),
   },
   'youtube-data-api-v3': {
     ...API_KEY_RULE,
@@ -608,7 +710,7 @@ const LEGACY_RULES: Record<string, ProviderRule> = {
   s3: {
     showDetailsTab: false,
     showConnectionStringTab: false,
-    zodSchema: s3ConfigSchema,
+    zodSchema: S3_FORM_SCHEMA,
     isValid: (v) => {
       const hasCreds =
         v.bucket &&
@@ -735,6 +837,6 @@ export function getProviderZodSchema(
   return resolveRule(extensionId, formConfig).zodSchema;
 }
 
-export function hasPresetFormConfig(extensionId: string): boolean {
+export function hasLegacyFormRule(extensionId: string): boolean {
   return extensionId in LEGACY_RULES;
 }

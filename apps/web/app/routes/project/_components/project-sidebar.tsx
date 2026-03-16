@@ -16,18 +16,26 @@ import { SidebarNavigation } from '@qwery/ui/sidebar-navigation';
 import { AccountDropdownContainer } from '~/components/account-dropdown-container';
 import { AppLogo } from '~/components/app-logo';
 import { createNavigationConfig } from '~/config/project.navigation.config';
+import { useDatasourceAddedFlash } from '~/lib/context/datasource-added-flash-context';
 import { SidebarOrgSelector } from './sidebar-org-selector';
 import { useProject } from '~/lib/context/project-context';
 import { useWorkspace } from '~/lib/context/workspace-context';
 import { WorkspaceModeEnum } from '@qwery/domain/enums';
 import { ProjectChatNotebookSidebarContent } from './project-chat-notebook-sidebar-content';
 
+const DATASOURCES_LABEL = 'common:routes.datasources';
+
 export function ProjectSidebar() {
   const { projectSlug } = useProject();
   const { workspace } = useWorkspace();
   const { toggleSidebar, state } = useSidebar();
+  const flash = useDatasourceAddedFlash();
   const isCollapsed = state === 'collapsed';
   const isSimpleMode = workspace.mode === WorkspaceModeEnum.SIMPLE;
+
+  const badgesByLabel = flash?.showDatasourceBadge
+    ? { [DATASOURCES_LABEL]: '+1' }
+    : undefined;
 
   const handleExpandClick = useCallback(() => {
     toggleSidebar();
@@ -128,7 +136,10 @@ export function ProjectSidebar() {
         >
           <SidebarOrgSelector />
         </div>
-        <SidebarNavigation config={navigationConfig} />
+        <SidebarNavigation
+          config={navigationConfig}
+          badgesByLabel={badgesByLabel}
+        />
         <ProjectChatNotebookSidebarContent />
       </SidebarContent>
       <SidebarFooter className="p-1.5">

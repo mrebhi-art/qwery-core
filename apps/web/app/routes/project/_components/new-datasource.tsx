@@ -38,17 +38,33 @@ export function NewDatasource({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedDatasource, setSelectedDatasource] =
     useState<DatasourceExtension | null>(null);
+  const [initialFormValues, setInitialFormValues] = useState<
+    Record<string, unknown> | undefined
+  >(undefined);
 
   const filterTags = ['SQL', 'Files', 'SaaS', 'API'];
 
   const openDrawerFor = useCallback((ds: DatasourceExtension) => {
     setSelectedDatasource(ds);
+    setInitialFormValues(undefined);
     setDrawerOpen(true);
   }, []);
 
   const closeDrawer = useCallback(() => {
     setDrawerOpen(false);
+    setInitialFormValues(undefined);
   }, []);
+
+  const handleSwitchToExtension = useCallback(
+    (extensionId: string, values: Record<string, unknown>) => {
+      const ds = datasources.find((d) => d.id === extensionId);
+      if (ds) {
+        setSelectedDatasource(ds);
+        setInitialFormValues(values);
+      }
+    },
+    [datasources],
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -401,12 +417,17 @@ export function NewDatasource({
       {selectedDatasource && (
         <DatasourceConnectSheet
           open={drawerOpen}
-          onOpenChange={setDrawerOpen}
+          onOpenChange={(open) => {
+            setDrawerOpen(open);
+            if (!open) setInitialFormValues(undefined);
+          }}
           extensionId={selectedDatasource.id}
           projectSlug={project_id}
           extensionMeta={selectedDatasource}
           onSuccess={closeDrawer}
           onCancel={closeDrawer}
+          initialFormValues={initialFormValues}
+          onSwitchToExtension={handleSwitchToExtension}
         />
       )}
     </div>

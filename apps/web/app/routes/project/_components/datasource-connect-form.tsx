@@ -1,8 +1,6 @@
-'use client';
-
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { z } from 'zod';
 import { z as zLib } from 'zod';
 import { Loader2, Pencil, Shuffle, Check } from 'lucide-react';
@@ -39,13 +37,20 @@ import { FormRenderer } from '@qwery/ui/form-renderer';
 import {
   getUrlForValidation,
   validateDatasourceUrl,
+  isGsheetLikeUrl,
 } from '~/lib/utils/datasource-utils';
 import {
-  hasPresetFormConfig,
+  validateUrlStructure,
+  type DataUrlFormat,
+} from '~/lib/utils/validate-datasource-url-structure';
+import {
+  hasLegacyFormRule,
   normalizeProviderConfig,
   validateProviderConfigWithZod,
   getDocsUrl,
 } from '~/lib/utils/datasource-form-config';
+import { getLogger } from '@qwery/shared/logger';
+import { useDatasourceAddedFlash } from '~/lib/context/datasource-added-flash-context';
 import { resolveDatasourceDriver } from '~/lib/utils/datasource-driver';
 import { DatasourceDocsLink } from './datasource-docs-link';
 import { DatasourceConnectionFields } from './datasource-connection-fields';
@@ -57,6 +62,127 @@ import {
 } from '~/lib/utils/error-key';
 import { ZodErrorVisualizer } from '@qwery/ui/qwery/datasource';
 import { ZodError } from 'zod';
+
+interface DatasourceFormActionsProps {
+  onCancel: () => void;
+  onTestConnection: () => void;
+  onSubmit: () => void;
+  isActionDisabled: boolean;
+  isTestConnectionDisabled: boolean;
+  isSubmitDisabled: boolean;
+  isPending: boolean;
+  isConnecting: boolean;
+  existingDatasource: Datasource | undefined;
+  onDeleteClick: () => void;
+}
+
+const DatasourceFormActions = React.memo(function DatasourceFormActions({
+  onCancel,
+  onTestConnection,
+  onSubmit,
+  isActionDisabled,
+  isTestConnectionDisabled,
+  isSubmitDisabled,
+  isPending,
+  isConnecting,
+  existingDatasource,
+  onDeleteClick,
+}: DatasourceFormActionsProps) {
+  return (
+    <div className="flex flex-col-reverse gap-3 pt-8 sm:flex-row sm:items-center sm:justify-between">
+      <Button
+        variant="ghost"
+        onClick={onCancel}
+        disabled={isActionDisabled}
+        className="text-muted-foreground hover:text-foreground hover:bg-transparent"
+      >
+        <Trans i18nKey="datasources:cancel" />
+      </Button>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        {existingDatasource && (
+          <Button
+            variant="destructive"
+            onClick={onDeleteClick}
+            disabled={isActionDisabled}
+            data-test="datasource-delete-button"
+          >
+            <Trans i18nKey="datasources:deleteButton" />
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          onClick={onTestConnection}
+          disabled={isTestConnectionDisabled}
+          className="border-border border bg-white font-semibold text-black shadow-sm transition-all hover:bg-gray-50 hover:text-black"
+        >
+          {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+          <Trans i18nKey="datasources:testConnection" />
+        </Button>
+        <Button
+          onClick={onSubmit}
+          disabled={isSubmitDisabled}
+          className="border-0 bg-yellow-400 font-bold text-black shadow-lg transition-all hover:bg-yellow-500"
+        >
+          {isConnecting ? (
+            <Loader2 className="mr-2 size-4 animate-spin" />
+          ) : (
+            <Check className="mr-2 size-4" />
+          )}
+          {existingDatasource ? (
+            isConnecting ? (
+              <Trans i18nKey="datasources:updating" />
+            ) : (
+              <Trans i18nKey="datasources:update" />
+            )
+          ) : (
+            <Trans i18nKey="datasources:connect" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+});
+
+function resolveValidConfig(
+  formValues: Record<string, unknown>,
+  usePresetForm: boolean,
+  extensionId: string,
+  effectiveSchema: z.ZodTypeAny,
+):
+  | { success: true; data: Record<string, unknown> }
+  | { success: false; error: string; zodError?: ZodError } {
+  if (usePresetForm) {
+    const zodResult = validateProviderConfigWithZod(
+      formValues,
+      extensionId,
+      undefined,
+    );
+    if (!zodResult.success) {
+      return {
+        success: false,
+        error: zodResult.error,
+        zodError: zodResult.zodError,
+      };
+    }
+    return {
+      success: true,
+      data: normalizeProviderConfig(zodResult.data, extensionId, undefined),
+    };
+  }
+  const parsed = effectiveSchema.safeParse(formValues);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error:
+        getFirstZodValidationMessage(parsed.error) || 'Invalid configuration',
+      zodError: parsed.error,
+    };
+  }
+  return {
+    success: true,
+    data: parsed.data as Record<string, unknown>,
+  };
+}
 
 export interface DatasourceConnectFormProps {
   extensionId: string;
@@ -76,6 +202,8 @@ export interface DatasourceConnectFormProps {
   onFormValidityChange?: (valid: boolean) => void;
   onTestConnectionLoadingChange?: (isLoading: boolean) => void;
   existingDatasource?: Datasource;
+  onSwitchToGsheet?: (sharedLink: string) => void;
+  initialFormValues?: Record<string, unknown>;
 }
 
 export function DatasourceConnectForm({
@@ -96,6 +224,8 @@ export function DatasourceConnectForm({
   onFormValidityChange,
   onTestConnectionLoadingChange,
   existingDatasource,
+  onSwitchToGsheet,
+  initialFormValues,
 }: DatasourceConnectFormProps) {
   const [internalName, setInternalName] = useState(
     () => existingDatasource?.name ?? generateRandomName(),
@@ -112,22 +242,52 @@ export function DatasourceConnectForm({
   const [validationError, setValidationError] = useState<ZodError | null>(null);
 
   const urlValidation = useMemo(() => {
-    if (
-      !extensionMeta?.supportsPreview ||
-      (extensionMeta?.previewUrlKind !== 'embeddable' &&
-        extensionMeta?.previewUrlKind !== 'data-file')
-    ) {
-      return { valid: true, error: null as string | null };
+    if (!extensionMeta?.supportsPreview) {
+      return {
+        valid: true,
+        error: null as string | null,
+        gsheetHintUrl: null as string | null,
+      };
     }
+
     const url = getUrlForValidation(formValues, extensionMeta);
+
+    // Special case: CSV Online with a Google Sheets link -> soft hint, not a hard error
+    if (extensionId === 'csv-online' && url && isGsheetLikeUrl(url)) {
+      return {
+        valid: true,
+        error: null,
+        gsheetHintUrl: url,
+      };
+    }
+
+    if (
+      extensionMeta.previewUrlKind !== 'embeddable' &&
+      extensionMeta.previewUrlKind !== 'data-file'
+    ) {
+      return {
+        valid: true,
+        error: null as string | null,
+        gsheetHintUrl: null as string | null,
+      };
+    }
+
     const result = validateDatasourceUrl(extensionMeta, url);
-    return { valid: result.isValid, error: result.error };
-  }, [formValues, extensionMeta]);
+    return {
+      valid: result.isValid,
+      error: result.error,
+      gsheetHintUrl: null as string | null,
+    };
+  }, [formValues, extensionMeta, extensionId]);
 
   const isFormValid = schemaValid && urlValidation.valid;
 
+  const lastFormValidRef = useRef<boolean | null>(null);
   useEffect(() => {
-    onFormValidityChange?.(isFormValid);
+    if (!onFormValidityChange) return;
+    if (lastFormValidRef.current === isFormValid) return;
+    lastFormValidRef.current = isFormValid;
+    onFormValidityChange(isFormValid);
   }, [isFormValid, onFormValidityChange]);
 
   useEffect(() => {
@@ -148,7 +308,7 @@ export function DatasourceConnectForm({
   const projectRepository = repositories.project;
   const extension = useGetExtension(extensionId);
   const extensionSchema = useExtensionSchema(extensionId);
-  const usePresetForm = hasPresetFormConfig(extensionId);
+  const usePresetForm = hasLegacyFormRule(extensionId);
   const docsUrl = extension.data?.docsUrl ?? getDocsUrl(extensionId, undefined);
 
   /** Fallback when extension has no schema (e.g. 404 on schema.js). FormRenderer only when !usePresetForm. */
@@ -218,16 +378,18 @@ export function DatasourceConnectForm({
     [onFormValuesChange],
   );
 
+  const { triggerDatasourceBadge } = useDatasourceAddedFlash() ?? {};
   const createDatasourceMutation = useCreateDatasource(
     datasourceRepository,
     (_datasource) => {
       toast.success(<Trans i18nKey="datasources:saveSuccess" />);
+      triggerDatasourceBadge?.();
       setIsConnecting(false);
       onSuccess();
     },
     (error) => {
       toast.error(getErrorKey(error, t));
-      console.error(error);
+      void getLogger().then((logger) => logger.error('Create datasource failed', { error }));
       setIsConnecting(false);
     },
   );
@@ -241,7 +403,7 @@ export function DatasourceConnectForm({
     },
     (error) => {
       toast.error(getErrorKey(error, t));
-      console.error(error);
+      void getLogger().then((logger) => logger.error('Update datasource failed', { error }));
       setIsConnecting(false);
     },
   );
@@ -255,46 +417,49 @@ export function DatasourceConnectForm({
     },
     (error) => {
       toast.error(getErrorKey(error, t));
-      console.error(error);
+      void getLogger().then((logger) => logger.error('Delete datasource failed', { error }));
     },
   );
 
-  const handleTestConnection = useCallback(() => {
+  const handleTestConnection = useCallback(async () => {
     if (!extension?.data) return;
     if (!formValues) {
       toast.error(<Trans i18nKey="datasources:formNotReady" />);
       return;
     }
 
-    let validData: Record<string, unknown>;
-    if (usePresetForm) {
-      const zodResult = validateProviderConfigWithZod(
-        formValues,
-        extensionId,
-        undefined,
-      );
-      if (!zodResult.success) {
-        setValidationError(zodResult.zodError ?? null);
-        toast.error(zodResult.error);
-        return;
+    const result = resolveValidConfig(
+      formValues,
+      usePresetForm,
+      extensionId,
+      effectiveSchema,
+    );
+    if (!result.success) {
+      setValidationError(result.zodError ?? null);
+      toast.error(result.error);
+      return;
+    }
+    setValidationError(null);
+    const validData = result.data;
+    const meta = extension.data;
+
+    if (
+      meta?.previewUrlKind === 'data-file' &&
+      (meta?.previewDataFormat === 'json' ||
+        meta?.previewDataFormat === 'csv' ||
+        meta?.previewDataFormat === 'parquet')
+    ) {
+      const url = getUrlForValidation(validData, meta);
+      if (url) {
+        const structureResult = await validateUrlStructure(
+          url,
+          meta.previewDataFormat as DataUrlFormat,
+        );
+        if (!structureResult.valid) {
+          toast.error(structureResult.error ?? 'URL format does not match');
+          return;
+        }
       }
-      setValidationError(null);
-      validData = normalizeProviderConfig(
-        zodResult.data,
-        extensionId,
-        undefined,
-      );
-    } else {
-      const parsed = (effectiveSchema as z.ZodTypeAny).safeParse(formValues);
-      if (!parsed.success) {
-        setValidationError(parsed.error);
-        const msg =
-          getFirstZodValidationMessage(parsed.error) || 'Invalid configuration';
-        toast.error(msg);
-        return;
-      }
-      setValidationError(null);
-      validData = parsed.data as Record<string, unknown>;
     }
 
     const dsMeta = extension.data as DatasourceExtension | undefined;
@@ -367,42 +532,46 @@ export function DatasourceConnectForm({
       return;
     }
 
-    let validData: Record<string, unknown>;
-    if (usePresetForm) {
-      const zodResult = validateProviderConfigWithZod(
-        formValues,
-        extensionId,
-        undefined,
-      );
-      if (!zodResult.success) {
-        setValidationError(zodResult.zodError ?? null);
-        toast.error(zodResult.error);
-        setIsConnecting(false);
-        return;
+    const result = resolveValidConfig(
+      formValues,
+      usePresetForm,
+      extensionId,
+      effectiveSchema,
+    );
+    if (!result.success) {
+      setValidationError(result.zodError ?? null);
+      toast.error(result.error);
+      setIsConnecting(false);
+      return;
+    }
+    setValidationError(null);
+    const validData = result.data;
+    const meta = extension.data;
+
+    if (
+      meta?.previewUrlKind === 'data-file' &&
+      (meta?.previewDataFormat === 'json' ||
+        meta?.previewDataFormat === 'csv' ||
+        meta?.previewDataFormat === 'parquet')
+    ) {
+      const url = getUrlForValidation(validData, meta);
+      if (url) {
+        const structureResult = await validateUrlStructure(
+          url,
+          meta.previewDataFormat as DataUrlFormat,
+        );
+        if (!structureResult.valid) {
+          toast.error(structureResult.error ?? 'URL format does not match');
+          setIsConnecting(false);
+          return;
+        }
       }
-      setValidationError(null);
-      validData = normalizeProviderConfig(
-        zodResult.data,
-        extensionId,
-        undefined,
-      );
-    } else {
-      const parsed = (effectiveSchema as z.ZodTypeAny).safeParse(formValues);
-      if (!parsed.success) {
-        setValidationError(parsed.error);
-        const msg =
-          getFirstZodValidationMessage(parsed.error) || 'Invalid configuration';
-        toast.error(msg);
-        setIsConnecting(false);
-        return;
-      }
-      setValidationError(null);
-      validData = parsed.data as Record<string, unknown>;
     }
 
     const dsMeta = extension.data as DatasourceExtension | undefined;
     if (!dsMeta) {
       toast.error(<Trans i18nKey="datasources:notFoundError" />);
+      setIsConnecting(false);
       return;
     }
     const driver = resolveDatasourceDriver(dsMeta, { config: validData });
@@ -418,7 +587,7 @@ export function DatasourceConnectForm({
       description: extension.data.description || '',
       datasource_provider: extension.data.id || '',
       datasource_driver: driver?.id || '',
-      datasource_kind: datasourceKind as string,
+      datasource_kind: datasourceKind,
       config: validData,
       createdBy: userId,
     });
@@ -449,37 +618,42 @@ export function DatasourceConnectForm({
     }
     setIsConnecting(true);
 
-    let validData: Record<string, unknown>;
-    if (usePresetForm) {
-      const zodResult = validateProviderConfigWithZod(
-        formValues,
-        extensionId,
-        undefined,
-      );
-      if (!zodResult.success) {
-        setValidationError(zodResult.zodError ?? null);
-        toast.error(zodResult.error);
-        setIsConnecting(false);
-        return;
-      }
-      setValidationError(null);
-      validData = normalizeProviderConfig(
-        zodResult.data,
-        extensionId,
-        undefined,
-      );
-    } else {
-      const parsed = (effectiveSchema as z.ZodTypeAny).safeParse(formValues);
-      if (!parsed.success) {
-        setValidationError(parsed.error);
-        const msg = parsed.error.issues[0]?.message ?? 'Invalid configuration';
-        toast.error(msg);
-        setIsConnecting(false);
-        return;
-      }
-      setValidationError(null);
-      validData = parsed.data as Record<string, unknown>;
+    const result = resolveValidConfig(
+      formValues,
+      usePresetForm,
+      extensionId,
+      effectiveSchema,
+    );
+    if (!result.success) {
+      setValidationError(result.zodError ?? null);
+      toast.error(result.error);
+      setIsConnecting(false);
+      return;
     }
+    setValidationError(null);
+    const validData = result.data;
+    const meta = extension.data;
+
+    if (
+      meta?.previewUrlKind === 'data-file' &&
+      (meta?.previewDataFormat === 'json' ||
+        meta?.previewDataFormat === 'csv' ||
+        meta?.previewDataFormat === 'parquet')
+    ) {
+      const url = getUrlForValidation(validData, meta);
+      if (url) {
+        const structureResult = await validateUrlStructure(
+          url,
+          meta.previewDataFormat as DataUrlFormat,
+        );
+        if (!structureResult.valid) {
+          toast.error(structureResult.error ?? 'URL format does not match');
+          setIsConnecting(false);
+          return;
+        }
+      }
+    }
+
     const driver = resolveDatasourceDriver(dsMeta, { config: validData });
     const runtime = driver?.runtime ?? 'browser';
     const datasourceKind =
@@ -523,62 +697,26 @@ export function DatasourceConnectForm({
     updateDatasourceMutation.isPending ||
     deleteDatasourceMutation.isPending;
   const isActionDisabled = isConnecting || isPending;
-  const isTestConnectionDisabled = isActionDisabled || !isFormValid;
+  const isTestConnectionDisabled = isActionDisabled;
   const isSubmitDisabled =
     isActionDisabled ||
     (existingDatasource ? false : isTestConnectionLoading);
+
+  const handleDeleteClick = useCallback(() => setIsDeleteDialogOpen(true), []);
+
   const actionsEl = (
-    <div className="flex flex-col-reverse gap-3 pt-8 sm:flex-row sm:items-center sm:justify-between">
-      <Button
-        variant="ghost"
-        onClick={onCancel}
-        disabled={isActionDisabled}
-        className="text-muted-foreground hover:text-foreground hover:bg-transparent"
-      >
-        <Trans i18nKey="datasources:cancel" />
-      </Button>
-      <div className="flex flex-col gap-3 sm:flex-row">
-        {existingDatasource && (
-          <Button
-            variant="destructive"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isActionDisabled}
-            data-test="datasource-delete-button"
-          >
-            <Trans i18nKey="datasources:deleteButton" />
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          onClick={handleTestConnection}
-          disabled={isTestConnectionDisabled}
-          className="border-border border bg-white font-semibold text-black shadow-sm transition-all hover:bg-gray-50 hover:text-black"
-        >
-          {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-          <Trans i18nKey="datasources:testConnection" />
-        </Button>
-        <Button
-          onClick={existingDatasource ? handleUpdate : handleConnect}
-          disabled={isSubmitDisabled}
-          className="border-0 bg-yellow-400 font-bold text-black shadow-lg transition-all hover:bg-yellow-500"
-        >
-          {isConnecting ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : (
-            <Check className="mr-2 size-4" />
-          )}
-          {existingDatasource ? (
-            isConnecting ? (
-              <Trans i18nKey="datasources:updating" />
-            ) : (
-              <Trans i18nKey="datasources:update" />
-            )
-          ) : (
-            <Trans i18nKey="datasources:connect" />
-          )}
-        </Button>
-      </div>
-    </div>
+    <DatasourceFormActions
+      onCancel={onCancel}
+      onTestConnection={handleTestConnection}
+      onSubmit={existingDatasource ? handleUpdate : handleConnect}
+      isActionDisabled={isActionDisabled}
+      isTestConnectionDisabled={isTestConnectionDisabled}
+      isSubmitDisabled={isSubmitDisabled}
+      isPending={isPending}
+      isConnecting={isConnecting}
+      existingDatasource={existingDatasource}
+      onDeleteClick={handleDeleteClick}
+    />
   );
 
   return (
@@ -705,16 +843,15 @@ export function DatasourceConnectForm({
                 />
               ) : usePresetForm ? (
                 <DatasourceConnectionFields
-                  key={existingDatasource?.id ?? 'new'}
+                  key={existingDatasource?.id ?? `new-${extensionId}`}
                   extensionId={extensionId}
                   formConfig={undefined}
                   onFormReady={handleFormReady}
                   onValidityChange={setSchemaValid}
                   _formId={formId ?? 'datasource-form'}
                   defaultValues={
-                    existingDatasource?.config as
-                    | Record<string, unknown>
-                    | undefined
+                    (existingDatasource?.config as Record<string, unknown>) ??
+                    initialFormValues
                   }
                 />
               ) : (
@@ -734,14 +871,32 @@ export function DatasourceConnectForm({
                   }
                 />
               )}
-              {urlValidation.error ? (
-                <p
-                  className="bg-destructive/15 text-destructive dark:bg-destructive/25 rounded-md px-3 py-2 text-sm font-medium dark:text-red-300"
-                  role="alert"
-                  data-test="datasource-url-validation-error"
-                >
-                  {urlValidation.error}
-                </p>
+              {urlValidation.gsheetHintUrl && extensionId === 'csv-online' ? (
+                <div className="border-border/40 bg-muted/20 text-muted-foreground mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs">
+                  <span className="max-w-xs">
+                    This looks like a Google Sheets link. For the best experience, use the Google
+                    Sheets datasource instead.
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => {
+                      onSwitchToGsheet?.(String(urlValidation.gsheetHintUrl));
+                    }}
+                  >
+                    Switch to Google Sheets
+                  </Button>
+                </div>
+              ) : urlValidation.error ? (
+              <p
+                className="border-destructive/30 bg-destructive/5 text-destructive dark:border-destructive/40 dark:bg-destructive/10 mt-1 flex gap-2 rounded-md border px-3 py-1.5 text-xs font-medium leading-snug dark:text-red-300"
+                role="alert"
+                data-test="datasource-url-validation-error"
+              >
+                {urlValidation.error}
+              </p>
               ) : null}
               {validationError && (
                 <ZodErrorVisualizer
@@ -767,7 +922,7 @@ export function DatasourceConnectForm({
               setIsDeleteDialogOpen(open);
           }}
         >
-          <AlertDialogContent className="z-[200]" overlayClassName="z-[200]">
+          <AlertDialogContent className="z-200" overlayClassName="z-200">
             <AlertDialogHeader>
               <AlertDialogTitle>
                 <Trans i18nKey="datasources:deleteConfirmTitle" />

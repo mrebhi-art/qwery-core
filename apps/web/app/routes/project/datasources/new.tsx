@@ -1,8 +1,8 @@
 import {
   type KeyboardEvent,
   startTransition,
+  useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -32,6 +32,7 @@ import { cn } from '@qwery/ui/utils';
 
 import pathsConfig from '~/config/paths.config';
 import { createPath } from '~/config/qwery.navigation.config';
+import { useDatasourceAddedFlash } from '~/lib/context/datasource-added-flash-context';
 import { useWorkspace } from '~/lib/context/workspace-context';
 import { useCreateDatasource } from '~/lib/mutations/use-create-datasource';
 import { useTestConnection } from '~/lib/mutations/use-test-connection';
@@ -39,6 +40,11 @@ import { generateRandomName } from '~/lib/names';
 import { useExtensionSchema } from '~/lib/queries/use-extension-schema';
 import { useGetExtension } from '~/lib/queries/use-get-extension';
 import { resolveDatasourceDriver } from '~/lib/utils/datasource-driver';
+import { getUrlForValidation } from '~/lib/utils/datasource-utils';
+import {
+  validateUrlStructure,
+  type DataUrlFormat,
+} from '~/lib/utils/validate-datasource-url-structure';
 import {
   getProjectBySlugKey,
   getProjectBySlugQueryFn,
@@ -46,10 +52,12 @@ import {
 import { DATASOURCES } from '~/lib/loaders/datasource-loader';
 import { getErrorKey } from '~/lib/utils/error-key';
 import {
-  hasPresetFormConfig,
+  hasLegacyFormRule,
   normalizeProviderConfig,
   validateProviderConfigWithZod,
 } from '~/lib/utils/datasource-form-config';
+import { getLogger } from '@qwery/shared/logger';
+import { DatasourceConnectionFields } from '../_components/datasource-connection-fields';
 import { DatasourceS3Fields } from '../_components/datasource-s3-fields';
 
 import type { Route } from './+types/new';
@@ -86,11 +94,12 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
   const nameInputRef = useRef<HTMLInputElement>(null);
   const { repositories, workspace } = useWorkspace();
   const queryClient = useQueryClient();
+  const { triggerDatasourceBadge } = useDatasourceAddedFlash() ?? {};
   const datasourceRepository = repositories.datasource;
 
   const extension = useGetExtension(extensionId);
   const extensionSchema = useExtensionSchema(extensionId);
-  const [isFormValid, setIsFormValid] = useState(false);
+  const [, setFormValid] = useState(false);
 
   const testConnectionMutation = useTestConnection(
     (result) => {
@@ -113,13 +122,14 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
     datasourceRepository,
     (_datasource) => {
       toast.success(<Trans i18nKey="datasources:saveSuccess" />);
+      triggerDatasourceBadge?.();
       navigate(createPath(pathsConfig.app.projectDatasources, project_id), {
         replace: true,
       });
     },
     (error) => {
       toast.error(getErrorKey(error, t));
-      console.error(error);
+      void getLogger().then((logger) => logger.error('Create datasource failed', { error }));
     },
   );
 
@@ -127,10 +137,8 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
     createDatasourceMutation.isPending || testConnectionMutation.isPending;
 
   useEffect(() => {
-    startTransition(() => {
-      setFormValues(null);
-      setDatasourceName(generateRandomName());
-    });
+    setFormValues(null);
+    setDatasourceName(generateRandomName());
   }, [extensionId]);
 
   useEffect(() => {
@@ -140,74 +148,218 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
     }
   }, [isEditingName]);
 
-  const handleNameSave = () => {
+  const handleNameSave = useCallback(() => {
     if (datasourceName.trim()) {
       setIsEditingName(false);
     } else {
       setDatasourceName(generateRandomName());
       setIsEditingName(false);
     }
-  };
+  }, [datasourceName]);
 
-  const handleNameKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleNameSave();
-    } else if (e.key === 'Escape') {
-      setDatasourceName(generateRandomName());
-      setIsEditingName(false);
-    }
-  };
-
-  const zodValid = useMemo(() => {
-    if (!formValues) return false;
-    if (hasPresetFormConfig(extensionId)) {
-      return validateProviderConfigWithZod(formValues, extensionId).success;
-    }
-    const schema = extensionSchema.data;
-    if (schema) {
-      const parsed = (
-        schema as { safeParse: (v: unknown) => { success: boolean } }
-      ).safeParse(formValues);
-      return parsed.success;
-    }
-    return false;
-  }, [formValues, extensionId, extensionSchema.data]);
-
-  const getValidConfig = (
-    values: Record<string, unknown>,
-  ):
-    | { success: true; config: Record<string, unknown> }
-    | { success: false; error: string } => {
-    if (hasPresetFormConfig(extensionId)) {
-      const result = validateProviderConfigWithZod(values, extensionId);
-      if (result.success) {
-        return {
-          success: true,
-          config: normalizeProviderConfig(result.data, extensionId),
-        };
+  const handleNameKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleNameSave();
+      } else if (e.key === 'Escape') {
+        setDatasourceName(generateRandomName());
+        setIsEditingName(false);
       }
-      return { success: false, error: result.error };
-    }
-    const schema = extensionSchema.data;
-    if (schema) {
-      const parsed = (
-        schema as {
-          safeParse: (v: unknown) => {
-            success: boolean;
-            data?: Record<string, unknown>;
-            error?: { issues: Array<{ message?: string }> };
+    },
+    [handleNameSave],
+  );
+
+  const getValidConfig = useCallback(
+    (
+      values: Record<string, unknown>,
+    ):
+      | { success: true; config: Record<string, unknown> }
+      | { success: false; error: string } => {
+      if (hasLegacyFormRule(extensionId)) {
+        const result = validateProviderConfigWithZod(values, extensionId);
+        if (result.success) {
+          return {
+            success: true,
+            config: normalizeProviderConfig(result.data, extensionId),
           };
         }
-      ).safeParse(values);
-      if (parsed.success && parsed.data) {
-        return { success: true, config: parsed.data };
+        return { success: false, error: result.error };
       }
-      const msg = parsed.error?.issues?.[0]?.message ?? 'Invalid configuration';
-      return { success: false, error: msg };
+      const schema = extensionSchema.data;
+      if (schema) {
+        const parsed = schema.safeParse(values);
+        if (parsed.success && parsed.data) {
+          return { success: true, config: parsed.data as Record<string, unknown> };
+        }
+        const msg =
+          parsed.error?.issues?.[0]?.message ?? 'Invalid configuration';
+        return { success: false, error: msg };
+      }
+      return { success: false, error: 'No schema available' };
+    },
+    [extensionId, extensionSchema.data],
+  );
+
+  const handleSubmit = useCallback(
+    async (values: unknown) => {
+      if (!extension?.data) {
+        toast.error(<Trans i18nKey="datasources:notFoundError" />);
+        return;
+      }
+
+      let projectId = workspace.projectId;
+      if (!projectId) {
+        try {
+          const project = await queryClient.fetchQuery({
+            queryKey: getProjectBySlugKey(project_id),
+            queryFn: getProjectBySlugQueryFn(repositories.project, project_id),
+          });
+          projectId = project.id;
+        } catch (error) {
+          toast.error(getErrorKey(error, t));
+          return;
+        }
+      }
+
+      if (!projectId) {
+        toast.error('Unable to resolve project context for datasource');
+        return;
+      }
+
+      const valuesRecord = values as Record<string, unknown>;
+      const userId = workspace.userId;
+
+      const validated = getValidConfig(valuesRecord);
+      if (!validated.success) {
+        toast.error(validated.error);
+        return;
+      }
+      const config = validated.config;
+      const meta = extension.data;
+      if (
+        meta?.previewUrlKind === 'data-file' &&
+        (meta?.previewDataFormat === 'json' ||
+          meta?.previewDataFormat === 'csv' ||
+          meta?.previewDataFormat === 'parquet')
+      ) {
+        const url = getUrlForValidation(config, meta);
+        if (url) {
+          const structureResult = await validateUrlStructure(
+            url,
+            meta.previewDataFormat as DataUrlFormat,
+          );
+          if (!structureResult.valid) {
+            toast.error(structureResult.error ?? 'URL format does not match');
+            return;
+          }
+        }
+      }
+
+      const dsMeta = extension.data as DatasourceExtension | undefined;
+      if (!dsMeta) {
+        toast.error(<Trans i18nKey="datasources:notFoundError" />);
+        return;
+      }
+      const driver = resolveDatasourceDriver(dsMeta, { config });
+      const runtime = driver?.runtime ?? 'browser';
+      const datasourceKind =
+        runtime === 'browser' ? DatasourceKind.EMBEDDED : DatasourceKind.REMOTE;
+
+      createDatasourceMutation.mutate({
+        projectId,
+        name: datasourceName.trim() || generateRandomName(),
+        description: extension.data.description || '',
+        datasource_provider: extension.data.id || '',
+        datasource_driver: driver?.id || '',
+        datasource_kind: datasourceKind,
+        config,
+        createdBy: userId,
+      });
+    },
+    [
+      extension.data,
+      workspace.projectId,
+      workspace.userId,
+      queryClient,
+      project_id,
+      repositories.project,
+      getValidConfig,
+      createDatasourceMutation,
+      datasourceName,
+      t,
+    ],
+  );
+
+  const handleFormReady = useCallback(
+    (v: unknown) => setFormValues(v as Record<string, unknown> | null),
+    [],
+  );
+
+  const handleTestConnection = useCallback(async () => {
+    if (!extension?.data) return;
+
+    if (!formValues) {
+      toast.error(<Trans i18nKey="datasources:formNotReady" />);
+      return;
     }
-    return { success: false, error: 'No schema available' };
-  };
+
+    const validated = getValidConfig(formValues);
+    if (!validated.success) {
+      toast.error(validated.error);
+      return;
+    }
+    const normalizedConfig = validated.config;
+    const meta = extension.data;
+    if (
+      meta?.previewUrlKind === 'data-file' &&
+      (meta?.previewDataFormat === 'json' ||
+        meta?.previewDataFormat === 'csv' ||
+        meta?.previewDataFormat === 'parquet')
+    ) {
+      const url = getUrlForValidation(normalizedConfig, meta);
+      if (url) {
+        const structureResult = await validateUrlStructure(
+          url,
+          meta.previewDataFormat as DataUrlFormat,
+        );
+        if (!structureResult.valid) {
+          toast.error(structureResult.error ?? 'URL format does not match');
+          return;
+        }
+      }
+    }
+
+    const dsMeta = extension.data as DatasourceExtension | undefined;
+    if (!dsMeta) {
+      toast.error(<Trans i18nKey="datasources:notFoundError" />);
+      return;
+    }
+
+    const driver = resolveDatasourceDriver(dsMeta, {
+      config: normalizedConfig,
+    });
+    const datasourceKind =
+      (driver?.runtime ?? 'browser') === 'browser'
+        ? DatasourceKind.EMBEDDED
+        : DatasourceKind.REMOTE;
+
+    const testDatasource: Partial<Datasource> = {
+      datasource_provider: extension.data.id,
+      datasource_driver: driver?.id ?? '',
+      datasource_kind: datasourceKind,
+      name: datasourceName || 'Test Connection',
+      config: normalizedConfig,
+    };
+
+    testConnectionMutation.mutate(testDatasource as Datasource);
+  }, [
+    extension.data,
+    formValues,
+    getValidConfig,
+    datasourceName,
+    testConnectionMutation,
+  ]);
 
   if (extension.isLoading) {
     return (
@@ -235,107 +387,8 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
     );
   }
 
-  const handleSubmit = async (values: unknown) => {
-    if (!extension?.data) {
-      toast.error(<Trans i18nKey="datasources:notFoundError" />);
-      return;
-    }
-
-    let projectId = workspace.projectId;
-    if (!projectId) {
-      try {
-        const project = await queryClient.fetchQuery({
-          queryKey: getProjectBySlugKey(project_id),
-          queryFn: getProjectBySlugQueryFn(repositories.project, project_id),
-        });
-        projectId = project.id;
-      } catch (error) {
-        toast.error(getErrorKey(error, t));
-        return;
-      }
-    }
-
-    if (!projectId) {
-      toast.error('Unable to resolve project context for datasource');
-      return;
-    }
-
-    const valuesRecord = values as Record<string, unknown>;
-    const userId = workspace.userId;
-
-    const validated = getValidConfig(valuesRecord);
-    if (!validated.success) {
-      toast.error(validated.error);
-      return;
-    }
-    const config = validated.config;
-
-    const dsMeta = extension.data as DatasourceExtension | undefined;
-    if (!dsMeta) {
-      toast.error(<Trans i18nKey="datasources:notFoundError" />);
-      return;
-    }
-    const driver = resolveDatasourceDriver(dsMeta, { config });
-    const runtime = driver?.runtime ?? 'browser';
-    const datasourceKind =
-      runtime === 'browser' ? DatasourceKind.EMBEDDED : DatasourceKind.REMOTE;
-
-    createDatasourceMutation.mutate({
-      projectId,
-      name: datasourceName.trim() || generateRandomName(),
-      description: extension.data.description || '',
-      datasource_provider: extension.data.id || '',
-      datasource_driver: driver?.id || '',
-      datasource_kind: datasourceKind as string,
-      config,
-      createdBy: userId,
-    });
-  };
-
-  const handleTestConnection = () => {
-    if (!extension?.data) return;
-
-    if (!formValues) {
-      toast.error(<Trans i18nKey="datasources:formNotReady" />);
-      return;
-    }
-
-    const validated = getValidConfig(formValues);
-    if (!validated.success) {
-      toast.error(validated.error);
-      return;
-    }
-    const normalizedConfig = validated.config;
-
-    const dsMeta = extension.data as DatasourceExtension | undefined;
-    if (!dsMeta) {
-      toast.error(<Trans i18nKey="datasources:notFoundError" />);
-      return;
-    }
-
-    const driver = resolveDatasourceDriver(dsMeta, {
-      config: normalizedConfig,
-    });
-    const datasourceKind =
-      (driver?.runtime ?? 'browser') === 'browser'
-        ? DatasourceKind.EMBEDDED
-        : DatasourceKind.REMOTE;
-
-    const testDatasource: Partial<Datasource> = {
-      datasource_provider: extension.data.id,
-      datasource_driver: driver?.id ?? '',
-      datasource_kind: datasourceKind,
-      name: datasourceName || 'Test Connection',
-      config: normalizedConfig,
-    };
-
-    testConnectionMutation.mutate(testDatasource as Datasource);
-  };
-
-  const canSubmit = isFormValid && formValues && zodValid;
-  const isTestConnectionDisabled =
-    isMutationPending || !formValues || !zodValid;
-  const isSubmitDisabled = isMutationPending || !canSubmit;
+  const isTestConnectionDisabled = isMutationPending;
+  const isSubmitDisabled = isMutationPending;
 
   return (
     <div className="bg-background flex h-full flex-col">
@@ -439,9 +492,16 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
               {extensionId === 's3' ? (
                 <DatasourceS3Fields
                   formId="datasource-form"
-                  onFormReady={(v) => setFormValues(v)}
-                  onValidityChange={setIsFormValid}
+                  onFormReady={handleFormReady}
+                  onValidityChange={setFormValid}
                   onSubmit={handleSubmit}
+                />
+              ) : hasLegacyFormRule(extensionId) ? (
+                <DatasourceConnectionFields
+                  extensionId={extensionId}
+                  onFormReady={handleFormReady}
+                  onValidityChange={setFormValid}
+                  _formId="datasource-form"
                 />
               ) : extensionSchema.data ? (
                 <FormRenderer
@@ -449,10 +509,8 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
                   onSubmit={handleSubmit}
                   formId="datasource-form"
                   locale={i18n.resolvedLanguage}
-                  onFormReady={(values) =>
-                    setFormValues(values as Record<string, unknown> | null)
-                  }
-                  onValidityChange={setIsFormValid}
+                  onFormReady={handleFormReady}
+                  onValidityChange={setFormValid}
                 />
               ) : extensionSchema.isLoading ? (
                 <div className="py-8" />

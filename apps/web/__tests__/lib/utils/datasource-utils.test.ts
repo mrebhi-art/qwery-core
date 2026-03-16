@@ -32,15 +32,6 @@ vi.mock('~/lib/utils/google-sheets-preview', () => ({
       return null;
     }
   }),
-  convertGoogleSheetsToEmbedUrl: vi.fn((url: string) => {
-    try {
-      const u = new URL(url.startsWith('http') ? url : `https://${url}`);
-      if (!gsheetHostRegex.test(u.hostname)) return null;
-      return `https://docs.google.com/spreadsheets/d/abc123/pubhtml?widget=true&headers=false&gid=0`;
-    } catch {
-      return null;
-    }
-  }),
 }));
 
 describe('isGsheetLikeUrl', () => {
@@ -241,6 +232,46 @@ describe('validateDatasourceUrl', () => {
       error: null,
     });
   });
+
+  it('rejects mismatched file extension for data-file kinds when previewDataFormat is set', () => {
+    const jsonMeta = {
+      id: 'json-online',
+      supportsPreview: true,
+      previewUrlKind: 'data-file' as const,
+      previewDataFormat: 'json' as const,
+    };
+    const csvMeta = {
+      id: 'csv-online',
+      supportsPreview: true,
+      previewUrlKind: 'data-file' as const,
+      previewDataFormat: 'csv' as const,
+    };
+    const parquetMeta = {
+      id: 'parquet-online',
+      supportsPreview: true,
+      previewUrlKind: 'data-file' as const,
+      previewDataFormat: 'parquet' as const,
+    };
+
+    expect(
+      validateDatasourceUrl(jsonMeta, 'https://example.com/file.csv'),
+    ).toEqual({
+      isValid: false,
+      error: 'This datasource expects a .json file URL.',
+    });
+    expect(
+      validateDatasourceUrl(csvMeta, 'https://example.com/file.json'),
+    ).toEqual({
+      isValid: false,
+      error: 'This datasource expects a .csv file URL.',
+    });
+    expect(
+      validateDatasourceUrl(parquetMeta, 'https://example.com/file.csv'),
+    ).toEqual({
+      isValid: false,
+      error: 'This datasource expects a .parquet file URL.',
+    });
+  });
 });
 
 describe('getUrlForValidation', () => {
@@ -292,7 +323,7 @@ describe('getDatasourcePreviewUrl', () => {
     ).toBe(null);
   });
 
-  it('returns embed URL for embeddable + valid Google Sheets link', () => {
+  it('returns raw URL for embeddable + Google Sheets link', () => {
     const meta = {
       id: 'gsheet-csv',
       supportsPreview: true,
@@ -300,12 +331,14 @@ describe('getDatasourcePreviewUrl', () => {
     };
     const url = getDatasourcePreviewUrl(
       {
-        sharedLink: 'https://docs.google.com/spreadsheets/d/1abc/edit#gid=0',
+        sharedLink:
+          'https://docs.google.com/spreadsheets/d/1abc12345678901234567890/edit#gid=0',
       },
       meta,
     );
     expect(url).toContain('docs.google.com');
-    expect(url).toContain('pubhtml');
+    expect(url).toContain('/spreadsheets/d/');
+    expect(url).toContain('/edit');
   });
 
   it('returns raw URL for data-file kind', () => {

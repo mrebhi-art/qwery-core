@@ -48,11 +48,8 @@ export function createNavigationConfig(slug: string) {
   });
 }
 
-export function createDatasourcePath(slug: string, name: string) {
-  return createPath(pathsConfig.app.newProjectDatasource, slug).replace(
-    '[name]',
-    name,
-  );
+export function createDatasourcePath(slug: string, _name: string) {
+  return createPath(pathsConfig.app.availableSources, slug);
 }
 
 export function createDatasourceViewPath(slug: string) {

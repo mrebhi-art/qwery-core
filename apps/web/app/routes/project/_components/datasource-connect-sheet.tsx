@@ -1,7 +1,13 @@
-'use client';
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Datasource } from '@qwery/domain/entities';
+
+function stringifySorted(obj: Record<string, unknown>): string {
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(obj).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+  );
+}
 import type { DatasourcePreviewRef } from './datasource-preview';
 
 import { Pencil, Shuffle, X } from 'lucide-react';
@@ -39,6 +45,11 @@ export interface DatasourceConnectSheetProps {
   onSuccess: () => void;
   onCancel: () => void;
   existingDatasource?: Datasource;
+  initialFormValues?: Record<string, unknown>;
+  onSwitchToExtension?: (
+    extensionId: string,
+    initialValues: Record<string, unknown>,
+  ) => void;
   className?: string;
 }
 
@@ -51,6 +62,8 @@ export function DatasourceConnectSheet({
   onSuccess,
   onCancel,
   existingDatasource,
+  initialFormValues,
+  onSwitchToExtension,
   className,
 }: DatasourceConnectSheetProps) {
   const actionsRef = useRef<HTMLDivElement | null>(null);
@@ -123,11 +136,10 @@ export function DatasourceConnectSheet({
     if (existingDatasource) {
       const nameChanged =
         datasourceName.trim() !== (existingDatasource.name ?? '').trim();
+      const a = formValues ?? null;
+      const b = existingDatasource.config ?? null;
       const configChanged =
-        formValues != null &&
-        existingDatasource.config != null &&
-        JSON.stringify(formValues) !==
-          JSON.stringify(existingDatasource.config);
+        a != null && b != null && stringifySorted(a) !== stringifySorted(b);
       return nameChanged || configChanged;
     }
     return (
@@ -315,6 +327,13 @@ export function DatasourceConnectSheet({
                     onFormValidityChange={setIsFormValid}
                     onTestConnectionLoadingChange={setIsTestConnectionLoading}
                     existingDatasource={existingDatasource}
+                    initialFormValues={initialFormValues}
+                    onSwitchToGsheet={
+                      onSwitchToExtension
+                        ? (sharedLink) =>
+                            onSwitchToExtension('gsheet-csv', { sharedLink })
+                        : undefined
+                    }
                   />
                 </div>
                 {formValues &&

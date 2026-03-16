@@ -1,7 +1,11 @@
-'use client';
-
 import type { Resolver } from 'react-hook-form';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import type { DatasourceFormConfigPayload } from '~/lib/utils/datasource-form-config';
 import { Eye, EyeOff, Database, Link as LinkIcon } from 'lucide-react';
@@ -23,6 +27,13 @@ import type {
   DatasourceFormPlaceholders,
   FieldLabels,
 } from '~/lib/utils/datasource-form-config';
+import {
+  asSubmitRecord,
+  DETAILS_KEYS,
+  getConnectionValueKey,
+  getDefaultConnectionValues,
+} from '~/lib/utils/datasource-connection-fields-utils';
+import { useDebouncedValue } from '~/lib/hooks/use-debounced-value';
 import {
   getDatasourceFormConfig,
   getProviderZodSchema,
@@ -79,7 +90,7 @@ function PasswordInput({
   );
 }
 
-function DetailsFieldsGrid({
+const DetailsFieldsGrid = React.memo(function DetailsFieldsGrid({
   control,
   fieldLabels,
   placeholders,
@@ -192,6 +203,7 @@ function DetailsFieldsGrid({
                   value={typeof field.value === 'string' ? field.value : ''}
                   onChange={field.onChange}
                   placeholder={placeholders.password}
+                  autoComplete="off"
                 />
               </FormControl>
               <FormMessage />
@@ -219,58 +231,7 @@ function DetailsFieldsGrid({
       )}
     </div>
   );
-}
-
-function getConnectionValueKey(
-  connectionFieldKind: string,
-  formConfig?: DatasourceFormConfigPayload | null,
-): string {
-  if (formConfig?.preset === 'embeddable') return 'database';
-  switch (connectionFieldKind) {
-    case 'apiKey':
-      return 'apiKey';
-    case 'sharedLink':
-      return 'sharedLink';
-    case 'fileUrl':
-      return formConfig?.normalizedKey ?? 'url';
-    default:
-      return 'connectionUrl';
-  }
-}
-
-const DEFAULT_KEYS = [
-  'host',
-  'port',
-  'database',
-  'username',
-  'password',
-  'connectionUrl',
-  'sharedLink',
-  'apiKey',
-  'url',
-  'jsonUrl',
-] as const;
-
-function defaultValues(): Record<string, string> {
-  return Object.fromEntries(DEFAULT_KEYS.map((k) => [k, '']));
-}
-
-function asSubmitRecord(
-  values: Record<string, unknown>,
-): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(values).filter(([, v]) => v !== undefined && v !== ''),
-  );
-}
-
-const DETAILS_KEYS = [
-  'host',
-  'port',
-  'database',
-  'schema',
-  'username',
-  'password',
-] as const;
+});
 
 export function DatasourceConnectionFields({
   extensionId,
@@ -313,14 +274,19 @@ export function DatasourceConnectionFields({
         const path = issue.path.join('.') || '_root';
         errors[path] = { type: 'custom', message: issue.message };
       }
-      return { values: {}, errors };
+      const firstMessage = result.error.issues[0]?.message;
+      if (firstMessage)
+        errors._root = { type: 'custom', message: firstMessage };
+      return { values, errors } as ReturnType<
+        Resolver<Record<string, unknown>>
+      >;
     },
     [schema],
   );
 
   const form = useForm<Record<string, unknown>>({
     defaultValues: {
-      ...defaultValues(),
+      ...getDefaultConnectionValues(),
       ...(config.showSslToggle ? { ssl: false } : {}),
       ...(defaultValuesProp ?? {}),
     } as Record<string, unknown>,
@@ -332,27 +298,35 @@ export function DatasourceConnectionFields({
     config.showDetailsTab ? 'details' : 'connection',
   );
 
-  const handleTabChange = useCallback((value: string) => {
-    setActiveTab(value);
-  }, []);
-
   const values = useWatch({ control: form.control });
   const isValid = form.formState.isValid;
+
+  const hostValue = useWatch({ control: form.control, name: 'host' });
+  useEffect(() => {
+    if (config.showDetailsTab && hostValue !== undefined) {
+      form.trigger('host');
+    }
+  }, [hostValue, config.showDetailsTab, form]);
 
   const connectionStringValue = useWatch({
     control: form.control,
     name: connectionValueKey,
   });
+  const debouncedConnectionString = useDebouncedValue(
+    typeof connectionStringValue === 'string' ? connectionStringValue : '',
+    400,
+  );
 
   useEffect(() => {
     if (
       activeTab === 'connection' &&
-      connectionStringValue &&
-      typeof connectionStringValue === 'string' &&
-      connectionStringValue.trim() &&
+      debouncedConnectionString.trim() &&
       config.showDetailsTab
     ) {
-      const parsed = parseConnectionString(connectionStringValue, extensionId);
+      const parsed = parseConnectionString(
+        debouncedConnectionString,
+        extensionId,
+      );
       if (parsed) {
         const currentValues = form.getValues();
         form.setValue('host', parsed.host || currentValues.host || '', {
@@ -376,7 +350,7 @@ export function DatasourceConnectionFields({
       }
     }
   }, [
-    connectionStringValue,
+    debouncedConnectionString,
     activeTab,
     extensionId,
     config.showDetailsTab,
@@ -434,7 +408,10 @@ export function DatasourceConnectionFields({
     onFormReady,
   ]);
 
+  const lastValidRef = useRef<boolean | null>(null);
   useEffect(() => {
+    if (lastValidRef.current === isValid) return;
+    lastValidRef.current = isValid;
     onValidityChange(isValid);
   }, [isValid, onValidityChange]);
 
@@ -446,20 +423,8 @@ export function DatasourceConnectionFields({
 
   const content = (
     <div className={cn('space-y-4', className)}>
-      {rootError ? (
-        <p
-          className="bg-destructive/15 text-destructive dark:bg-destructive/25 rounded-md px-3 py-2 text-sm font-medium dark:text-red-300"
-          role="alert"
-        >
-          {rootError}
-        </p>
-      ) : null}
       {showTabs ? (
-        <Tabs
-          value={activeTab}
-          onValueChange={handleTabChange}
-          className="w-full"
-        >
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="bg-muted/30 text-muted-foreground mb-6 grid h-10 w-full grid-cols-2 items-center justify-center rounded-md p-1">
             <TabsTrigger value="details" className="flex items-center gap-2">
               <Database className="size-3.5" />
@@ -494,6 +459,7 @@ export function DatasourceConnectionFields({
                       {...field}
                       value={typeof field.value === 'string' ? field.value : ''}
                       placeholder={placeholders.connectionString}
+                      autoComplete="off"
                       className="bg-background/50 min-h-[140px] resize-none font-mono text-sm"
                     />
                   </FormControl>
@@ -515,6 +481,7 @@ export function DatasourceConnectionFields({
                   {...field}
                   value={typeof field.value === 'string' ? field.value : ''}
                   placeholder={placeholders.connectionString}
+                  autoComplete="off"
                   className="bg-background/50 min-h-[140px] resize-none font-mono text-sm"
                 />
               </FormControl>
@@ -530,6 +497,14 @@ export function DatasourceConnectionFields({
           showSslToggle={showSslToggle}
         />
       )}
+      {rootError ? (
+        <p
+          className="border-destructive/30 bg-destructive/5 text-destructive dark:bg-destructive/10 rounded-r-md border-l-4 px-3 py-2.5 text-sm font-medium dark:text-red-400"
+          role="alert"
+        >
+          {rootError}
+        </p>
+      ) : null}
     </div>
   );
 

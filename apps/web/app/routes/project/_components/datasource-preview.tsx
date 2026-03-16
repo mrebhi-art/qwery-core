@@ -1,7 +1,6 @@
-'use client';
-
 import {
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -33,8 +32,6 @@ import {
 } from '~/lib/utils/google-sheets-preview';
 import { fetchJsonData } from '~/lib/utils/json-preview-utils';
 import { fetchParquetData, fetchCsvData } from '~/lib/utils/data-preview-utils';
-
-import { getErrorKey } from '~/lib/utils/error-key';
 import { DatasourcePublishingGuide } from './datasource-publishing-guide';
 import { JsonViewer, type JsonViewMode } from './json-viewer';
 
@@ -77,7 +74,7 @@ export const DatasourcePreview = forwardRef<
     className,
     isTestConnectionLoading: _isTestConnectionLoading = false,
   },
-  _ref,
+  ref,
 ) {
   const { t } = useTranslation('common');
   const { theme, resolvedTheme } = useTheme();
@@ -87,75 +84,103 @@ export const DatasourcePreview = forwardRef<
     [formValues, extensionMeta],
   );
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [publicationStatus, setPublicationStatus] =
-    useState<PublicationStatus>('unknown');
-  const [isIframeLoading, setIsIframeLoading] = useState(false);
-  const [jsonData, setJsonData] = useState<unknown>(null);
-  const [jsonError, setJsonError] = useState<string | null>(null);
-  const [isLoadingJson, setIsLoadingJson] = useState(false);
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
-  const [copied, setCopied] = useState(false);
-  const [viewMode, setViewMode] = useState<JsonViewMode>('table');
-  const [isWasmFallbackRequested, setIsWasmFallbackRequested] = useState(false);
-  const [showPublishingGuide, setShowPublishingGuide] = useState(false);
-  const [previewRevealReady, setPreviewRevealReady] = useState(false);
 
-  useEffect(() => {
-    const next = extensionMeta?.previewDataFormat === 'json' ? 'tree' : 'table';
-    queueMicrotask(() => setViewMode(next));
-  }, [extensionMeta?.previewDataFormat]);
+  const [previewState, setPreviewState] = useState({
+    refreshKey: 0,
+    isIframeLoading: false,
+    previewRevealReady: false,
+    publicationStatus: 'unknown' as PublicationStatus,
+    isWasmFallbackRequested: false,
+  });
 
-  useEffect(() => {
-    if (!previewUrl) {
-      queueMicrotask(() => setPublicationStatus('unknown'));
-      return;
-    }
-    setRefreshKey((prev) => prev + 1);
-    setIsIframeLoading(true);
-    setIsWasmFallbackRequested(false);
-    setJsonData(null);
-    setJsonError(null);
-    if (
-      extensionMeta?.previewUrlKind === 'embeddable' &&
-      isGsheetLikeUrl(previewUrl)
-    ) {
-      setShowPublishingGuide(true);
-    } else {
-      setShowPublishingGuide(false);
-    }
-  }, [previewUrl, extensionMeta?.previewUrlKind]);
+  const [dataState, setDataState] = useState({
+    jsonData: null as unknown,
+    jsonError: null as string | null,
+    isLoadingJson: false,
+    expandedPaths: new Set<string>() as Set<string>,
+    copied: false,
+    viewMode: 'table' as JsonViewMode,
+  });
+
+  const refreshKey = previewState.refreshKey;
+  const isIframeLoading = previewState.isIframeLoading;
+  const previewRevealReady = previewState.previewRevealReady;
+  const publicationStatus = previewState.publicationStatus;
+  const isWasmFallbackRequested = previewState.isWasmFallbackRequested;
+  const jsonData = dataState.jsonData;
+  const jsonError = dataState.jsonError;
+  const isLoadingJson = dataState.isLoadingJson;
+  const expandedPaths = dataState.expandedPaths;
+  const copied = dataState.copied;
+  const viewMode = dataState.viewMode;
+
+  const validationError = useMemo(() => {
+    const url = getUrlForValidation(formValues ?? null, extensionMeta);
+    return validateDatasourceUrl(extensionMeta, url).error ?? null;
+  }, [extensionMeta, formValues]);
 
   const needsPublicationCheck =
     extensionMeta?.previewUrlKind === 'embeddable' &&
     isGsheetLikeUrl(previewUrl);
+  const showPublishingGuide =
+    needsPublicationCheck && publicationStatus === 'not-published';
+
+  useEffect(() => {
+    const next = extensionMeta?.previewDataFormat === 'json' ? 'tree' : 'table';
+    queueMicrotask(() =>
+      setDataState((d) => ({ ...d, viewMode: next as JsonViewMode })),
+    );
+  }, [extensionMeta?.previewDataFormat]);
 
   useEffect(() => {
     if (!previewUrl) {
-      setPreviewRevealReady(false);
+      queueMicrotask(() =>
+        setPreviewState((p) => ({ ...p, publicationStatus: 'unknown' })),
+      );
+      return;
+    }
+    queueMicrotask(() => {
+      setPreviewState((p) => ({
+        ...p,
+        refreshKey: p.refreshKey + 1,
+        isIframeLoading: true,
+        isWasmFallbackRequested: false,
+      }));
+      setDataState((d) => ({
+        ...d,
+        jsonData: null,
+        jsonError: null,
+      }));
+    });
+  }, [previewUrl, extensionMeta?.previewUrlKind]);
+
+  useEffect(() => {
+    if (!previewUrl) {
+      queueMicrotask(() =>
+        setPreviewState((p) => ({ ...p, previewRevealReady: false })),
+      );
       return;
     }
     if (!needsPublicationCheck) {
-      setPreviewRevealReady(true);
+      queueMicrotask(() =>
+        setPreviewState((p) => ({ ...p, previewRevealReady: true })),
+      );
       return;
     }
-    setPreviewRevealReady(false);
+    queueMicrotask(() =>
+      setPreviewState((p) => ({ ...p, previewRevealReady: false })),
+    );
     const timer = setTimeout(() => {
-      setPreviewRevealReady(true);
+      setPreviewState((p) => ({ ...p, previewRevealReady: true }));
     }, PREVIEW_REVEAL_DELAY_MS);
     return () => clearTimeout(timer);
   }, [previewUrl, needsPublicationCheck]);
 
   useEffect(() => {
-    if (needsPublicationCheck && publicationStatus === 'not-published') {
-      setShowPublishingGuide(true);
-    }
-  }, [needsPublicationCheck, publicationStatus]);
-
-  useEffect(() => {
     if (!needsPublicationCheck || !previewUrl) {
-      queueMicrotask(() => setPublicationStatus('unknown'));
+      queueMicrotask(() =>
+        setPreviewState((p) => ({ ...p, publicationStatus: 'unknown' })),
+      );
       return;
     }
 
@@ -163,52 +188,54 @@ export const DatasourcePreview = forwardRef<
       | string
       | undefined;
     if (!sharedLink || typeof sharedLink !== 'string') {
-      queueMicrotask(() => setPublicationStatus('unknown'));
+      queueMicrotask(() =>
+        setPreviewState((p) => ({ ...p, publicationStatus: 'unknown' })),
+      );
       return;
     }
 
-    queueMicrotask(() => setPublicationStatus('checking'));
+    queueMicrotask(() =>
+      setPreviewState((p) => ({ ...p, publicationStatus: 'checking' })),
+    );
     detectPublishedState(sharedLink)
       .then((status) => {
-        setPublicationStatus(status);
+        setPreviewState((p) => ({ ...p, publicationStatus: status }));
       })
       .catch(() => {
-        setPublicationStatus('unknown');
+        setPreviewState((p) => ({ ...p, publicationStatus: 'unknown' }));
       });
   }, [needsPublicationCheck, previewUrl, formValues]);
 
-  useEffect(() => {
-    const url = getUrlForValidation(formValues ?? null, extensionMeta);
-    const { error } = validateDatasourceUrl(extensionMeta, url);
-    setValidationError(error);
-  }, [extensionMeta, formValues]);
-
   const needsDataFetching = extensionMeta?.previewUrlKind === 'data-file';
   const dataFormat = extensionMeta?.previewDataFormat;
-  const isGSheetUrl = (url: string | null) =>
-    !!url?.includes('docs.google.com/spreadsheets');
 
   useEffect(() => {
     if (!needsDataFetching || !previewUrl) {
-      if (!isGSheetUrl(previewUrl)) {
-        queueMicrotask(() => {
-          setJsonData(null);
-          setJsonError(null);
-          setIsLoadingJson(false);
-        });
+      if (!isGsheetLikeUrl(previewUrl)) {
+        queueMicrotask(() =>
+          setDataState((d) => ({
+            ...d,
+            jsonData: null,
+            jsonError: null,
+            isLoadingJson: false,
+          })),
+        );
       }
       return;
     }
 
-    const gsheet = isGSheetUrl(previewUrl);
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    const gsheet = isGsheetLikeUrl(previewUrl);
     const isDirectCsv = dataFormat === 'csv' && !gsheet;
     if (!isDirectCsv && dataFormat !== 'json' && dataFormat !== 'parquet') {
-      return;
+      return () => controller.abort();
     }
 
     queueMicrotask(() => {
-      setIsLoadingJson(true);
-      setJsonError(null);
+      if (signal.aborted) return;
+      setDataState((d) => ({ ...d, isLoadingJson: true, jsonError: null }));
     });
 
     const fetcher =
@@ -220,17 +247,27 @@ export const DatasourcePreview = forwardRef<
 
     fetcher
       .then((result) => {
+        if (signal.aborted) return;
         if (result.error) {
-          setJsonError(getErrorKey(new Error(result.error), t));
-          setJsonData(null);
+          setDataState((d) => ({
+            ...d,
+            jsonError: result.error,
+            jsonData: null,
+          }));
         } else {
-          setJsonData(result.data);
-          setExpandedPaths(new Set(['root']));
+          setDataState((d) => ({
+            ...d,
+            jsonData: result.data,
+            expandedPaths: new Set(['root']),
+          }));
         }
       })
       .finally(() => {
-        setIsLoadingJson(false);
+        if (signal.aborted) return;
+        setDataState((d) => ({ ...d, isLoadingJson: false }));
       });
+
+    return () => controller.abort();
   }, [previewUrl, refreshKey, needsDataFetching, dataFormat, t]);
 
   useEffect(() => {
@@ -243,29 +280,42 @@ export const DatasourcePreview = forwardRef<
       return;
     }
 
+    const controller = new AbortController();
+    const { signal } = controller;
+
     const gSheetIdMatch = previewUrl.match(
       /\/spreadsheets\/d\/(e\/)?([a-zA-Z0-9-_]{20,})/,
     );
-    if (!gSheetIdMatch) return;
+    if (!gSheetIdMatch) return () => controller.abort();
 
     const sheetId = gSheetIdMatch[2];
     const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsLoadingJson(true);
-    setJsonError(null); // Clear any previous error
+    queueMicrotask(() =>
+      setDataState((d) => ({ ...d, isLoadingJson: true, jsonError: null })),
+    );
     fetchCsvData(csvUrl)
       .then((result) => {
+        if (signal.aborted) return;
         if (!result.error && result.data) {
-          setJsonData(result.data);
-          setExpandedPaths(new Set(['root']));
+          setDataState((d) => ({
+            ...d,
+            jsonData: result.data,
+            expandedPaths: new Set(['root']),
+          }));
         } else if (result.error) {
-          setJsonError(getErrorKey(new Error(result.error), t));
+          setDataState((d) => ({
+            ...d,
+            jsonError: result.error,
+          }));
         }
       })
       .finally(() => {
-        setIsLoadingJson(false);
+        if (signal.aborted) return;
+        setDataState((d) => ({ ...d, isLoadingJson: false }));
       });
+
+    return () => controller.abort();
   }, [
     needsPublicationCheck,
     publicationStatus,
@@ -274,37 +324,47 @@ export const DatasourcePreview = forwardRef<
     t,
   ]);
 
-  const handleRefresh = () => {
-    setIsIframeLoading(true);
-    setRefreshKey((prev) => prev + 1);
+  const handleRefresh = useCallback(() => {
+    setPreviewState((p) => ({
+      ...p,
+      isIframeLoading: true,
+      refreshKey: p.refreshKey + 1,
+    }));
     if (iframeRef.current) {
-      // eslint-disable-next-line no-self-assign
+      // Force iframe reload by reassigning src
+      // eslint-disable-next-line no-self-assign -- intentional refresh
       iframeRef.current.src = iframeRef.current.src;
     }
-  };
+  }, []);
 
-  const handleIframeLoad = () => {
-    setIsIframeLoading(false);
-  };
+  useImperativeHandle(ref, () => ({ refresh: handleRefresh }), [handleRefresh]);
+
+  const handleIframeLoad = useCallback(() => {
+    setPreviewState((p) => ({ ...p, isIframeLoading: false }));
+  }, []);
 
   const togglePath = useCallback((path: string) => {
-    setExpandedPaths((prev) => {
-      const next = new Set(prev);
+    setDataState((d) => {
+      const next = new Set(d.expandedPaths);
       if (next.has(path)) {
         next.delete(path);
       } else {
         next.add(path);
       }
-      return next;
+      return { ...d, expandedPaths: next };
     });
+  }, []);
+
+  const setViewMode = useCallback((mode: JsonViewMode) => {
+    setDataState((d) => ({ ...d, viewMode: mode }));
   }, []);
 
   const handleCopyJson = useCallback(async () => {
     if (jsonData === null) return;
     try {
       await navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setDataState((d) => ({ ...d, copied: true }));
+      setTimeout(() => setDataState((d) => ({ ...d, copied: false })), 2000);
     } catch (error) {
       console.error('Failed to copy JSON:', error);
     }
@@ -314,19 +374,27 @@ export const DatasourcePreview = forwardRef<
   const currentTheme = resolvedTheme || theme || 'light';
   const themeParam = currentTheme === 'dark' ? '&theme=dark' : '';
 
-  const displayUrl: string | undefined = previewUrl
-    ? previewUrl +
-      (previewUrl.includes('?')
-        ? '&' + themeParam.substring(1)
-        : '?' + themeParam.substring(1))
+  const iframeBaseUrl: string | null = useMemo(() => {
+    if (!previewUrl) return null;
+    return previewUrl;
+  }, [previewUrl]);
+
+  const displayUrl: string | undefined = iframeBaseUrl
+    ? themeParam
+      ? iframeBaseUrl +
+        (iframeBaseUrl.includes('?') ? '&' : '?') +
+        themeParam.substring(1)
+      : iframeBaseUrl
     : undefined;
 
   const supportsPreview = supportsPreviewProp === true;
-  const usesJsonFormat = dataFormat === 'json';
+  const extensionId = extensionMeta?.id ?? null;
+  const usesJsonFormat = dataFormat === 'json' || extensionId === 'json-online';
   const usesParquetFormat = dataFormat === 'parquet';
-  const usesCsvFormat = dataFormat === 'csv';
+  const usesCsvFormat =
+    (dataFormat === 'csv' || extensionId === 'csv-online') &&
+    !needsPublicationCheck;
   const hasValidUrl = Boolean(previewUrl) && !validationError;
-  const hasPreview = Boolean(previewUrl) && !validationError;
 
   // Early return if datasource doesn't support preview
   if (!supportsPreview) {
@@ -361,14 +429,13 @@ export const DatasourcePreview = forwardRef<
   const showWasmTableView =
     usesJsonFormat ||
     usesParquetFormat ||
-    (usesCsvFormat && !!jsonData) ||
+    usesCsvFormat ||
     (needsPublicationCheck && (!!jsonData || isWasmFallbackRequested));
 
   const showPublishingGuideCollapsible =
-    hasPreview &&
+    hasValidUrl &&
     previewRevealReady &&
-    needsPublicationCheck &&
-    publicationStatus === 'not-published' &&
+    showPublishingGuide &&
     !jsonData &&
     !isWasmFallbackRequested;
 
@@ -383,7 +450,12 @@ export const DatasourcePreview = forwardRef<
               variant="outline"
               size="sm"
               className="h-8 border-dashed text-[11px]"
-              onClick={() => setIsWasmFallbackRequested(true)}
+              onClick={() =>
+                setPreviewState((p) => ({
+                  ...p,
+                  isWasmFallbackRequested: true,
+                }))
+              }
               disabled={isLoadingJson}
             >
               {isLoadingJson ? (
@@ -400,7 +472,7 @@ export const DatasourcePreview = forwardRef<
       )}
 
       {/* During delay: full-width loading (same as preview container) */}
-      {hasPreview && !previewRevealReady && (
+      {hasValidUrl && !previewRevealReady && (
         <div className="group border-border bg-muted/30 dark:bg-muted/25 relative flex min-h-[300px] flex-1 flex-col overflow-hidden rounded-lg border transition-colors duration-300">
           <div className="flex flex-1 items-center justify-center">
             <p className="text-muted-foreground flex items-center gap-2 text-sm">
@@ -411,7 +483,7 @@ export const DatasourcePreview = forwardRef<
         </div>
       )}
 
-      {hasPreview && previewRevealReady && (
+      {hasValidUrl && previewRevealReady && (
         <div className="shrink-0">
           <h3 className="text-foreground text-sm font-semibold">
             {getPreviewTitle(extensionMeta)}
@@ -419,7 +491,7 @@ export const DatasourcePreview = forwardRef<
         </div>
       )}
 
-      {hasPreview && previewRevealReady && (
+      {hasValidUrl && previewRevealReady && (
         <div className="group border-border bg-muted/30 dark:bg-muted/25 relative flex min-h-[300px] flex-1 flex-col overflow-hidden rounded-lg border transition-colors duration-300">
           <div className="relative flex h-full min-h-0 w-full flex-1 flex-col">
             {showWasmTableView ? (

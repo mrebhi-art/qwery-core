@@ -210,6 +210,9 @@ importers:
       hono:
         specifier: ^4.10.7
         version: 4.11.7
+      papaparse:
+        specifier: ^5.5.3
+        version: 5.5.3
       zod:
         specifier: 'catalog:'
         version: 4.3.6
@@ -1079,12 +1082,18 @@ importers:
       '@qwery/extension-clickhouse-node':
         specifier: workspace:*
         version: link:../extensions/clickhouse-node
+      '@qwery/extension-clickhouse-web':
+        specifier: workspace:*
+        version: link:../extensions/clickhouse-web
       '@qwery/extension-csv-online':
         specifier: workspace:*
         version: link:../extensions/csv-online
       '@qwery/extension-duckdb':
         specifier: workspace:*
         version: link:../extensions/duckdb
+      '@qwery/extension-duckdb-wasm':
+        specifier: workspace:*
+        version: link:../extensions/duckdb-wasm
       '@qwery/extension-gsheet-csv':
         specifier: workspace:*
         version: link:../extensions/gsheet-csv
@@ -1097,6 +1106,9 @@ importers:
       '@qwery/extension-parquet-online':
         specifier: workspace:*
         version: link:../extensions/parquet-online
+      '@qwery/extension-pglite':
+        specifier: workspace:*
+        version: link:../extensions/pglite
       '@qwery/extension-postgresql':
         specifier: workspace:*
         version: link:../extensions/postgresql

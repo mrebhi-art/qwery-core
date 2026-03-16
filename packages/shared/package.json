@@ -24,7 +24,8 @@
     "./message-constants": "./src/message-constants.ts",
     "./message-role-utils": "./src/utils/message-role.ts",
     "./error": "./src/error/index.ts",
-    "./export": "./src/export.ts"
+    "./export": "./src/export.ts",
+    "./csv-validate": "./src/csv-validate.ts"
   },
   "devDependencies": {
     "@qwery/eslint-config": "workspace:*",

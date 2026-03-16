@@ -158,7 +158,7 @@ function getDriverFactoryFromModule(mod: DriverModule): unknown {
   return typeof factory === 'function' ? factory : undefined;
 }
 
-const loadedDrivers = new Set<string>();
+const driverLoadPromises = new Map<string, Promise<void>>();
 
 async function loadDriverModule(driverId: string): Promise<DriverModule> {
   const importFn = driverImports.get(driverId);
@@ -193,51 +193,52 @@ export async function getDriverInstance(
   context: DriverContext,
 ): Promise<ReturnType<DriverFactory>> {
   let factory = datasources.getDriverRegistration(driver.id)?.factory;
-  if (factory) {
-    const driverContext: DriverContext = {
-      ...context,
-      runtime: context.runtime ?? driver.runtime,
-    };
-    return factory(driverContext);
-  }
 
-  if (!loadedDrivers.has(driver.id)) {
-    loadedDrivers.add(driver.id);
-    try {
-      let mod: DriverModule;
+  if (!factory) {
+    let loadPromise = driverLoadPromises.get(driver.id);
 
-      if (driver.runtime === 'node') {
-        mod = await loadDriverModule(driver.id);
-      } else {
-        const entry = driver.entry ?? './dist/driver.js';
-        const fileName = entry.split(/[/\\]/).pop() || 'driver.js';
-        const g = globalThis as unknown as {
-          window?: { location: { origin: string } };
-        };
-        const origin = g.window?.location?.origin ?? '';
-        const url = `${origin}/extensions/${driver.id}/${fileName}`;
-        const dynamicImport = new Function('url', 'return import(url)');
-        mod = await dynamicImport(url);
-      }
+    if (!loadPromise) {
+      loadPromise = (async () => {
+        try {
+          let mod: DriverModule;
 
-      const driverFactory = getDriverFactoryFromModule(mod);
+          if (driver.runtime === 'node') {
+            mod = await loadDriverModule(driver.id);
+          } else {
+            const entry = driver.entry ?? './dist/driver.js';
+            const fileName = entry.split(/[/\\]/).pop() || 'driver.js';
+            const g = globalThis as unknown as {
+              window?: { location: { origin: string } };
+            };
+            const origin = g.window?.location?.origin ?? '';
+            const url = `${origin}/extensions/${driver.id}/${fileName}`;
+            const dynamicImport = new Function('url', 'return import(url)');
+            mod = await dynamicImport(url);
+          }
 
-      if (typeof driverFactory === 'function') {
-        factory = driverFactory as DriverFactory;
-        datasources.registerDriver(
-          driver.id,
-          factory,
-          driver.runtime ?? 'node',
-        );
-      } else {
-        throw new Error(
-          `Driver ${driver.id} did not export a driverFactory or default function`,
-        );
-      }
-    } catch (err) {
-      loadedDrivers.delete(driver.id);
-      throw err;
+          const driverFactory = getDriverFactoryFromModule(mod);
+
+          if (typeof driverFactory === 'function') {
+            datasources.registerDriver(
+              driver.id,
+              driverFactory as DriverFactory,
+              driver.runtime ?? 'node',
+            );
+          } else {
+            throw new Error(
+              `Driver ${driver.id} did not export a driverFactory or default function`,
+            );
+          }
+        } finally {
+          driverLoadPromises.delete(driver.id);
+        }
+      })();
+
+      driverLoadPromises.set(driver.id, loadPromise);
     }
+
+    await loadPromise;
+    factory = datasources.getDriverRegistration(driver.id)?.factory;
   }
 
   if (!factory) {

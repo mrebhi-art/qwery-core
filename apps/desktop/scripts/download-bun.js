@@ -11,7 +11,10 @@ import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BUN_VERSION = '1.3.9';
+// Bun on Windows occasionally has crash regressions; keep it overridable and
+// allow pinning a different patch version per platform.
+const DEFAULT_BUN_VERSION = '1.3.9';
+const WINDOWS_BUN_VERSION = '1.3.8';
 const BINARIES_DIR = path.resolve(__dirname, '../src-tauri/binaries');
 
 const TARGET_TO_BUN_ZIP = {
@@ -52,6 +55,12 @@ async function downloadBun() {
     process.exit(1);
   }
 
+  const bunVersion =
+    process.env.BUN_VERSION ||
+    (process.platform === 'win32'
+      ? process.env.BUN_VERSION_WINDOWS || WINDOWS_BUN_VERSION
+      : DEFAULT_BUN_VERSION);
+
   const ext = process.platform === 'win32' ? '.exe' : '';
   const outputName = `bun-${target}${ext}`;
   const outputPath = path.join(BINARIES_DIR, outputName);
@@ -61,7 +70,7 @@ async function downloadBun() {
     return;
   }
 
-  const url = `https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/${zipName}`;
+  const url = `https://github.com/oven-sh/bun/releases/download/bun-v${bunVersion}/${zipName}`;
   console.log(`Downloading Bun for ${target}...`);
 
   const response = await fetch(url);
@@ -73,7 +82,7 @@ async function downloadBun() {
   const arrayBuffer = await response.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  const baseUrl = `https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}`;
+  const baseUrl = `https://github.com/oven-sh/bun/releases/download/bun-v${bunVersion}`;
   const sumsRes = await fetch(`${baseUrl}/SHASUMS256.txt`);
   if (!sumsRes.ok) {
     console.error('❌ Failed to fetch checksums');

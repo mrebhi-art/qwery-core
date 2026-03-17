@@ -37,6 +37,22 @@ fn configure_webview_zoom() {}
 const SERVICE_NAME: &str = "run.qwery.desktop";
 
 fn keyring_entry(key: &str) -> Result<Entry, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, use an explicit "target" so credentials are stable across
+        // dev/prod builds and installer contexts.
+        Entry::new_with_target(SERVICE_NAME, SERVICE_NAME, key)
+            .map_err(|e| format!("keyring init error: {e}"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Entry::new(SERVICE_NAME, key).map_err(|e| format!("keyring init error: {e}"))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn keyring_entry_legacy(key: &str) -> Result<Entry, String> {
+    // Previous behavior: service=user mapping only. Keep as legacy read/migrate path.
     Entry::new(SERVICE_NAME, key).map_err(|e| format!("keyring init error: {e}"))
 }
 
@@ -56,25 +72,86 @@ fn append_log_line(app: &tauri::AppHandle, line: &str) {
 }
 
 #[tauri::command]
-fn save_api_key(key: String, value: String) -> Result<(), String> {
+fn save_api_key(app: tauri::AppHandle, key: String, value: String) -> Result<(), String> {
+    append_log_line(&app, &format!("desktop:save_api_key key={key} value_len={}", value.len()));
     let entry = keyring_entry(&key)?;
     entry
         .set_password(&value)
-        .map_err(|e| format!("keyring write error: {e}"))
-}
+        .map_err(|e| {
+            append_log_line(&app, &format!("desktop:save_api_key key={key} status=error err={e}"));
+            format!("keyring write error: {e}")
+        })?;
 
-#[tauri::command]
-fn get_api_key(key: String) -> Result<Option<String>, String> {
-    let entry = keyring_entry(&key)?;
+    // Verify it actually persisted (catches backend issues early).
     match entry.get_password() {
-        Ok(v) => Ok(Some(v)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(format!("keyring read error: {e}")),
+        Ok(v) if v == value => {
+            append_log_line(&app, &format!("desktop:save_api_key key={key} status=ok"));
+            #[cfg(target_os = "windows")]
+            {
+                // Best-effort cleanup of legacy location if it exists.
+                if let Ok(legacy) = keyring_entry_legacy(&key) {
+                    let _ = legacy.delete_credential();
+                }
+            }
+            Ok(())
+        }
+        Ok(_) => {
+            append_log_line(&app, &format!("desktop:save_api_key key={key} status=verify_mismatch"));
+            Err("keyring verify mismatch".to_string())
+        }
+        Err(e) => {
+            append_log_line(&app, &format!("desktop:save_api_key key={key} status=verify_error err={e}"));
+            Err(format!("keyring verify error: {e}"))
+        }
     }
 }
 
 #[tauri::command]
-fn delete_api_key(key: String) -> Result<(), String> {
+fn get_api_key(app: tauri::AppHandle, key: String) -> Result<Option<String>, String> {
+    append_log_line(&app, &format!("desktop:get_api_key key={key}"));
+    let entry = keyring_entry(&key)?;
+    match entry.get_password() {
+        Ok(v) => {
+            append_log_line(&app, &format!("desktop:get_api_key key={key} status=set len={}", v.len()));
+            Ok(Some(v))
+        }
+        Err(keyring::Error::NoEntry) => {
+            #[cfg(target_os = "windows")]
+            {
+                // Legacy fallback + migrate: if credentials exist under the old scheme,
+                // copy them into the new target-based entry so subsequent reads work.
+                if let Ok(legacy) = keyring_entry_legacy(&key) {
+                    match legacy.get_password() {
+                        Ok(v) => {
+                            append_log_line(&app, &format!("desktop:get_api_key key={key} status=legacy_set len={}", v.len()));
+                            if !v.is_empty() {
+                                if let Ok(primary) = keyring_entry(&key) {
+                                    let _ = primary.set_password(&v);
+                                }
+                            }
+                            let _ = legacy.delete_credential();
+                            return Ok(Some(v));
+                        }
+                        Err(keyring::Error::NoEntry) => {}
+                        Err(e) => {
+                            append_log_line(&app, &format!("desktop:get_api_key key={key} status=legacy_error err={e}"));
+                        }
+                    }
+                }
+            }
+            append_log_line(&app, &format!("desktop:get_api_key key={key} status=missing"));
+            Ok(None)
+        }
+        Err(e) => {
+            append_log_line(&app, &format!("desktop:get_api_key key={key} status=error err={e}"));
+            Err(format!("keyring read error: {e}"))
+        }
+    }
+}
+
+#[tauri::command]
+fn delete_api_key(app: tauri::AppHandle, key: String) -> Result<(), String> {
+    append_log_line(&app, &format!("desktop:delete_api_key key={key}"));
     let entry = keyring_entry(&key)?;
     entry
         .delete_credential()
@@ -82,7 +159,18 @@ fn delete_api_key(key: String) -> Result<(), String> {
             keyring::Error::NoEntry => Ok(()),
             other => Err(other),
         })
-        .map_err(|e| format!("keyring delete error: {e}"))
+        .map_err(|e| {
+            append_log_line(&app, &format!("desktop:delete_api_key key={key} status=error err={e}"));
+            format!("keyring delete error: {e}")
+        })?;
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(legacy) = keyring_entry_legacy(&key) {
+            let _ = legacy.delete_credential();
+        }
+    }
+    append_log_line(&app, &format!("desktop:delete_api_key key={key} status=ok"));
+    Ok(())
 }
 
 #[tauri::command]

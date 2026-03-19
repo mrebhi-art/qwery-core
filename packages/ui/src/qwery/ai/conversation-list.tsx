@@ -754,7 +754,7 @@ export function ConversationList({
                   size="sm"
                   onClick={handleLoadMore}
                   disabled={isLoadingMore}
-                  className="text-muted-foreground hover:text-foreground h-9 w-full bg-background hover:bg-muted"
+                  className="text-muted-foreground hover:text-foreground bg-background hover:bg-muted h-9 w-full"
                   data-test="conversation-load-more"
                 >
                   {isLoadingMore ? 'Loading...' : 'Load more'}

@@ -175,9 +175,21 @@ export default function WelcomePage() {
 
         {/* PRIMARY CHAT INPUT */}
         <section className="mb-12">
+          <div className="mb-4 flex flex-wrap justify-center gap-2.5">
+            {suggestions.map((suggestion) => (
+              <button
+                key={suggestion.id}
+                onClick={() => handleSuggestionClick(suggestion)}
+                className="border-border/50 bg-card hover:bg-muted/50 text-muted-foreground hover:text-foreground hover:border-foreground cursor-pointer rounded-md border px-4 py-2.5 text-sm transition-colors dark:hover:border-white"
+              >
+                {suggestion.query}
+              </button>
+            ))}
+          </div>
+
           <PromptInput
             onSubmit={handleSubmit}
-            className="bg-card border-border/60 rounded-lg border shadow-sm transition-shadow hover:shadow-md"
+            className="border-border/60 rounded-lg border bg-transparent shadow-sm transition-shadow hover:shadow-md"
             globalDrop
           >
             <PromptInputBody>
@@ -189,7 +201,7 @@ export default function WelcomePage() {
                 className="min-h-[120px] resize-none border-none px-4 py-4 text-[15px] focus-visible:ring-0"
               />
             </PromptInputBody>
-            <PromptInputFooter className="bg-muted/20 border-border/40 border-t px-3 py-2.5">
+            <PromptInputFooter className="bg-transparent px-3 py-2.5">
               <PromptInputTools />
               <PromptInputSubmit
                 disabled={!input.trim() || createConversationMutation.isPending}
@@ -200,19 +212,6 @@ export default function WelcomePage() {
               </PromptInputSubmit>
             </PromptInputFooter>
           </PromptInput>
-
-          {/* Example prompts */}
-          <div className="mt-4 flex flex-wrap justify-center gap-2.5">
-            {suggestions.map((suggestion) => (
-              <button
-                key={suggestion.id}
-                onClick={() => handleSuggestionClick(suggestion)}
-                className="border-border/50 bg-card hover:bg-muted/50 text-muted-foreground hover:text-foreground hover:border-foreground cursor-pointer rounded-md border px-4 py-2.5 text-sm transition-colors dark:hover:border-white"
-              >
-                {suggestion.query}
-              </button>
-            ))}
-          </div>
         </section>
 
         <LandingSectionDivider label={t('quickActions')} />

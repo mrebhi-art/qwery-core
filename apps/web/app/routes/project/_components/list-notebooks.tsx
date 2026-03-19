@@ -29,7 +29,7 @@ import { Button } from '@qwery/ui/button';
 import { Input } from '@qwery/ui/input';
 import { Trans } from '@qwery/ui/trans';
 import { Switch } from '@qwery/ui/switch';
-import { cn, truncateText } from '@qwery/ui/utils';
+import { cn, truncateText, highlightSearchMatch } from '@qwery/ui/utils';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
@@ -87,18 +87,24 @@ export function ListNotebooks({
   const [shouldAnimate, setShouldAnimate] = useState(false);
 
   useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'f' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         setShouldAnimate(true);
         searchInputRef.current?.focus();
 
-        setTimeout(() => setShouldAnimate(false), 1000);
+        if (timeoutId) clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => setShouldAnimate(false), 1000);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, []);
 
   const filteredNotebooks = useMemo(() => {
@@ -137,20 +143,6 @@ export function ListNotebooks({
 
   const goToPage = (page: number) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-  };
-
-  const highlightMatch = (text: string, query: string) => {
-    if (!query.trim()) return text;
-    const regex = new RegExp(`(${query})`, 'gi');
-    return text.split(regex).map((part, index) =>
-      part.toLowerCase() === query.toLowerCase() ? (
-        <span key={index} className="bg-[#ffcb51] text-black">
-          {part}
-        </span>
-      ) : (
-        part
-      ),
-    );
   };
 
   const handleSortClick = (criterion: SortCriterion) => {
@@ -440,7 +432,7 @@ export function ListNotebooks({
                                 className="truncate text-sm font-semibold"
                                 title={notebook.title}
                               >
-                                {highlightMatch(
+                                {highlightSearchMatch(
                                   truncateText(notebook.title, 40),
                                   searchQuery,
                                 )}
@@ -537,7 +529,7 @@ export function ListNotebooks({
                                   className="truncate text-sm font-semibold"
                                   title={notebook.title}
                                 >
-                                  {highlightMatch(
+                                  {highlightSearchMatch(
                                     truncateText(notebook.title, 40),
                                     searchQuery,
                                   )}

@@ -48,6 +48,8 @@ function SidebarLayoutInner(
   const [persistedConversationSlug, setPersistedConversationSlug] = useState<
     string | null
   >(null);
+  const persistedConversationSlugRef = useRef<string | null>(null);
+  const hasRestoredConversationSlugRef = useRef(false);
 
   // Note: We intentionally do NOT sync workspace context with URL here.
   // Components use URL-derived project data directly via useGetProjectBySlug.
@@ -70,21 +72,16 @@ function SidebarLayoutInner(
           NOTEBOOK_SIDEBAR_CONVERSATION_KEY,
         );
         if (persisted) {
+          persistedConversationSlugRef.current = persisted;
           setPersistedConversationSlug(persisted);
-          // Restore conversation param to URL if not present
-          // This ensures sidebar opens on refresh
-          if (!conversationSlugFromUrl && persisted) {
-            const currentUrl = new URL(window.location.href);
-            currentUrl.searchParams.set('conversation', persisted);
-            window.history.replaceState(
-              {},
-              '',
-              currentUrl.pathname + currentUrl.search,
-            );
-            // Update searchParams to trigger re-render
-            setSearchParams(new URLSearchParams(currentUrl.searchParams), {
-              replace: true,
-            });
+
+          // Restore conversation param to URL if not present.
+          // Use React Router's setSearchParams (avoid direct window.history mutation).
+          if (!conversationSlugFromUrl) {
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.set('conversation', persisted);
+            setSearchParams(nextParams, { replace: true });
+            hasRestoredConversationSlugRef.current = true;
           }
         }
       } catch (error) {
@@ -104,16 +101,29 @@ function SidebarLayoutInner(
             NOTEBOOK_SIDEBAR_CONVERSATION_KEY,
             conversationSlugFromUrl,
           );
+          persistedConversationSlugRef.current = conversationSlugFromUrl;
           setPersistedConversationSlug(conversationSlugFromUrl);
-        } else if (!conversationSlugFromUrl && persistedConversationSlug) {
+          hasRestoredConversationSlugRef.current = false;
+          return;
+        }
+
+        // conversationSlugFromUrl is falsy here (param removed or missing).
+        // Skip removal during the initial "hydrate from localStorage" cycle.
+        if (hasRestoredConversationSlugRef.current) {
+          hasRestoredConversationSlugRef.current = false;
+          return;
+        }
+
+        if (persistedConversationSlugRef.current) {
           localStorage.removeItem(NOTEBOOK_SIDEBAR_CONVERSATION_KEY);
+          persistedConversationSlugRef.current = null;
           setPersistedConversationSlug(null);
         }
       } catch (error) {
         console.error('Failed to persist conversation slug:', error);
       }
     }
-  }, [isNotebookPage, conversationSlugFromUrl, persistedConversationSlug]);
+  }, [isNotebookPage, conversationSlugFromUrl]);
 
   const conversationSlug = useMemo(() => {
     return conversationSlugFromUrl || persistedConversationSlug || 'default';
@@ -221,16 +231,24 @@ function SidebarLayoutInner(
   );
 }
 
-function SidebarLayout(props: Route.ComponentProps & React.PropsWithChildren) {
+function ProjectLayoutWrapper({ children }: React.PropsWithChildren) {
   return (
     <ProjectProvider>
       <ProjectGuard>
         <ProjectPausedOverlay />
-        <NotebookSidebarProvider>
-          <SidebarLayoutInner {...props} />
-        </NotebookSidebarProvider>
+        {children}
       </ProjectGuard>
     </ProjectProvider>
+  );
+}
+
+function SidebarLayout(props: Route.ComponentProps & React.PropsWithChildren) {
+  return (
+    <ProjectLayoutWrapper>
+      <NotebookSidebarProvider>
+        <SidebarLayoutInner {...props} />
+      </NotebookSidebarProvider>
+    </ProjectLayoutWrapper>
   );
 }
 
@@ -238,29 +256,26 @@ function SimpleModeSidebarLayout(
   props: Route.ComponentProps & React.PropsWithChildren,
 ) {
   return (
-    <ProjectProvider>
-      <ProjectGuard>
-        <ProjectPausedOverlay />
-        <AgentStatusProvider>
-          <SidebarProvider defaultOpen={true}>
-            <Page>
-              <PageNavigation>
-                <ProjectSidebar />
-              </PageNavigation>
-              <PageFooter>
-                <LayoutFooter />
-              </PageFooter>
-              <div className="flex h-full flex-col">
-                <div className="bg-background w-fit px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
-                  <ProjectBreadcrumb />
-                </div>
-                <div className="flex-1 overflow-hidden">{props.children}</div>
+    <ProjectLayoutWrapper>
+      <AgentStatusProvider>
+        <SidebarProvider defaultOpen={true}>
+          <Page>
+            <PageNavigation>
+              <ProjectSidebar />
+            </PageNavigation>
+            <PageFooter>
+              <LayoutFooter />
+            </PageFooter>
+            <div className="flex h-full flex-col">
+              <div className="bg-background w-fit px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
+                <ProjectBreadcrumb />
               </div>
-            </Page>
-          </SidebarProvider>
-        </AgentStatusProvider>
-      </ProjectGuard>
-    </ProjectProvider>
+              <div className="flex-1 overflow-hidden">{props.children}</div>
+            </div>
+          </Page>
+        </SidebarProvider>
+      </AgentStatusProvider>
+    </ProjectLayoutWrapper>
   );
 }
 

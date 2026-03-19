@@ -559,7 +559,7 @@ export function UserMessageBubble({
       <div className="flex w-full max-w-full min-w-0 items-center overflow-x-hidden">
         {previewData && (
           <div
-            className="flex min-h-0 min-w-0 max-w-[65%] shrink-0 justify-end overflow-hidden"
+            className="flex min-h-0 max-w-[65%] min-w-0 shrink-0 justify-end overflow-hidden"
             style={
               bubbleHeight != null ? { maxHeight: bubbleHeight } : undefined
             }
@@ -567,7 +567,7 @@ export function UserMessageBubble({
             <HoverCard open={isHoverCardOpen} onOpenChange={setIsHoverCardOpen}>
               <HoverCardTrigger asChild>
                 <div
-                  className="text-muted-foreground hover:text-foreground relative flex h-full min-h-0 w-full cursor-pointer items-center justify-end overflow-hidden border-0 bg-transparent p-0 text-right text-xs leading-relaxed transition-colors [mask-image:linear-gradient(to_bottom,black_60%,transparent_100%)]"
+                  className="text-muted-foreground hover:text-foreground relative flex h-full min-h-0 w-full cursor-pointer items-center justify-end overflow-hidden border-0 bg-transparent [mask-image:linear-gradient(to_bottom,black_60%,transparent_100%)] p-0 text-right text-xs leading-relaxed transition-colors"
                   role="button"
                   tabIndex={0}
                   title={

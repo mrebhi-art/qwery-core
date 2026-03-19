@@ -4,7 +4,7 @@ import { useGetNotebookById } from '~/lib/queries/use-get-notebook';
 import Agent from '../_components/agent';
 import { useParams, useNavigate } from 'react-router';
 import { useWorkspace } from '~/lib/context/workspace-context';
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AgentUIWrapperRef } from '../_components/agent-ui-wrapper';
 import { BotAvatar } from '@qwery/ui/bot-avatar';
 import { Button } from '@qwery/ui/button';
@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@qwery/ui/dropdown-menu';
+import { ConfirmDeleteDialog } from '@qwery/ui/qwery/confirm-delete-dialog';
 import { useDeleteConversation } from '~/lib/mutations/use-conversation';
 import { useConversationListPrefsStore } from '~/lib/store/use-conversation-list-prefs';
 import { useTranslation } from 'react-i18next';
@@ -63,18 +64,19 @@ export default function ConversationPage() {
 
   const isLoading = getMessages.isLoading || getConversation.isLoading;
 
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
   if (!isLoading && !getConversation.data) {
     throw new Response('Not Found', { status: 404 });
   }
 
-  const notebookId = useMemo(() => {
-    const conversation = getConversation.data;
-    if (!conversation?.title) return null;
-
-    const notebookTitlePattern = /^Notebook - (.+)$/;
-    const match = conversation.title.match(notebookTitlePattern);
+  // TODO: conversation.type should carry a notebookId field instead of encoding it in the title
+  const notebookId = (() => {
+    const title = getConversation.data?.title;
+    if (!title) return null;
+    const match = title.match(/^Notebook - (.+)$/);
     return match ? match[1] : null;
-  }, [getConversation.data]);
+  })();
 
   const notebook = useGetNotebookById(repositories.notebook, notebookId || '', {
     enabled: !!notebookId,
@@ -114,15 +116,15 @@ export default function ConversationPage() {
 
   const handleDelete = () => {
     if (!currentConversation) return;
-    const confirmed = window.confirm(
-      t('chat:delete_confirm', {
-        defaultValue: 'Delete this conversation? This cannot be undone.',
-      }),
-    );
-    if (!confirmed) return;
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!currentConversation) return;
 
     deleteConversationMutation.mutate(currentConversation.id, {
       onSuccess: () => {
+        setShowDeleteDialog(false);
         toast.success(
           t('chat:delete_success', {
             defaultValue: 'Conversation deleted',
@@ -173,8 +175,6 @@ export default function ConversationPage() {
     }
   }, [getMessages.data, getConversation.data, slug, isLoading]);
 
-  const initialSuggestions = useMemo(() => [...GENERIC_CHAT_SUGGESTIONS], []);
-
   if (isLoading) {
     return (
       <div className="flex size-full flex-col items-center justify-center gap-4 p-8 text-center">
@@ -210,7 +210,7 @@ export default function ConversationPage() {
         ref={agentRef}
         conversationSlug={slug as string}
         initialMessages={getMessages.data}
-        initialSuggestions={initialSuggestions}
+        initialSuggestions={GENERIC_CHAT_SUGGESTIONS}
       />
       {currentConversation && (
         <div className="pointer-events-none fixed top-4 right-6 z-40 flex items-center gap-2">
@@ -263,6 +263,15 @@ export default function ConversationPage() {
           </DropdownMenu>
         </div>
       )}
+
+      <ConfirmDeleteDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        itemName="conversation"
+        itemCount={1}
+        isLoading={deleteConversationMutation.isPending}
+        onConfirm={handleConfirmDelete}
+      />
       {notebookId && notebook.data?.slug && (
         <Button
           onClick={handleGoToNotebook}

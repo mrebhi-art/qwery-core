@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import {
   ChevronLeftIcon,
@@ -27,6 +27,7 @@ import {
 
 import { Button } from '@qwery/ui/button';
 import { Input } from '@qwery/ui/input';
+import { NotebookCard } from '@qwery/ui/notebook';
 import { Trans } from '@qwery/ui/trans';
 import { Switch } from '@qwery/ui/switch';
 import { cn, truncateText, highlightSearchMatch } from '@qwery/ui/utils';
@@ -170,8 +171,8 @@ export function ListNotebooks({
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 flex-col gap-6 px-8 py-6 lg:px-16 lg:py-10">
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">
-            <Trans i18nKey="notebooks:list_title" defaults="Notebooks" />
+          <h1 className="text-4xl font-bold tracking-tight">
+            <Trans i18nKey="notebooks:list_title" defaults="Saved Notebooks" />
           </h1>
         </div>
 
@@ -409,60 +410,37 @@ export function ListNotebooks({
                 const hasUnsavedChanges = unsavedNotebookIds.includes(
                   notebook.id,
                 );
+                const createdAt = new Date(notebook.createdAt);
                 return (
-                  <div
+                  <NotebookCard
                     key={notebook.id}
-                    className="bg-card group relative overflow-hidden rounded-xl border transition-all hover:border-[#ffcb51]/50 hover:shadow-lg"
-                  >
-                    <Link
-                      to={createPath(
-                        pathsConfig.app.projectNotebook,
-                        notebook.slug,
-                      )}
-                      className="flex h-full flex-col p-6"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <div className="bg-muted/50 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border">
-                            <Notebook className="h-5 w-5" />
-                          </div>
-                          <div className="flex min-w-0 flex-1 flex-col">
-                            <div className="flex items-center gap-2">
-                              <h3
-                                className="truncate text-sm font-semibold"
-                                title={notebook.title}
-                              >
-                                {highlightSearchMatch(
-                                  truncateText(notebook.title, 40),
-                                  searchQuery,
-                                )}
-                              </h3>
-                              {hasUnsavedChanges && (
-                                <span className="h-2 w-2 shrink-0 rounded-full border border-[#ffcb51]/50 bg-[#ffcb51] shadow-sm" />
-                              )}
-                            </div>
-                            <span className="text-muted-foreground flex items-center gap-1 text-[11px]">
-                              <User className="h-2.5 w-2.5" />
-                              System
-                            </span>
-                          </div>
-                        </div>
-                        <div className="text-muted-foreground ml-2 flex shrink-0 items-center gap-1.5 text-xs">
-                          <Clock className="h-3.5 w-3.5" />
-                          {new Date(notebook.createdAt).toLocaleString(
-                            'en-US',
-                            {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            },
+                    id={notebook.id}
+                    name={
+                      <div className="flex items-center gap-2">
+                        <span title={notebook.title}>
+                          {highlightSearchMatch(
+                            truncateText(notebook.title, 40),
+                            searchQuery,
                           )}
-                        </div>
+                        </span>
+                        {hasUnsavedChanges && (
+                          <span className="h-2 w-2 shrink-0 rounded-full border border-[#ffcb51]/50 bg-[#ffcb51] shadow-sm" />
+                        )}
                       </div>
-                    </Link>
-                  </div>
+                    }
+                    description="System"
+                    hasUnsavedChanges={hasUnsavedChanges}
+                    createdAt={createdAt}
+                    onClick={() =>
+                      navigate(
+                        createPath(
+                          pathsConfig.app.projectNotebook,
+                          notebook.slug,
+                        ),
+                      )
+                    }
+                    dataTest={`notebook-card-${notebook.id}`}
+                  />
                 );
               })}
             </div>

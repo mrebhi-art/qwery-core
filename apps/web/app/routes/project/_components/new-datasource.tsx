@@ -177,7 +177,7 @@ export function NewDatasource({
         <div className="px-8 py-6 lg:px-16 lg:py-10">
           <div className="flex flex-col gap-5">
             <div>
-              <h1 className="text-foreground text-2xl font-semibold tracking-tight">
+              <h1 className="text-foreground text-4xl font-bold tracking-tight">
                 <Trans i18nKey="datasources:new_pageTitle" />
               </h1>
               <p className="text-muted-foreground mt-1 text-sm">
@@ -268,7 +268,7 @@ export function NewDatasource({
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {paginatedDatasources.map((datasource, index) => {
                   const hasFailed = failedLogos.has(datasource.id);
                   const showLogo = datasource.icon && !hasFailed;

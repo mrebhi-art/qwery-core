@@ -250,7 +250,7 @@ export function ListDatasources({
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 flex-col gap-6 px-8 py-6 lg:px-16 lg:py-10">
-        <h1 className="text-3xl font-bold">
+        <h1 className="text-4xl font-bold tracking-tight">
           <Trans
             i18nKey="datasources:list_title"
             defaults="Saved Datasources"
@@ -571,21 +571,10 @@ export function ListDatasources({
                                 createdBy={datasource.createdBy}
                                 logo={logo}
                                 provider={datasource.datasource_provider}
-                                viewButton={
-                                  <Link
-                                    to={createDatasourceViewPath(
-                                      datasource.slug,
-                                    )}
-                                    className="flex w-full items-center justify-center gap-2 px-3 py-2"
-                                  >
-                                    <span className="text-foreground group-hover/btn:text-foreground text-xs font-medium transition-colors">
-                                      <Trans
-                                        i18nKey="datasources:card.view"
-                                        defaults="View"
-                                      />
-                                    </span>
-                                    <ArrowRight className="text-muted-foreground group-hover/btn:text-foreground h-3.5 w-3.5 transition-all group-hover/btn:translate-x-1" />
-                                  </Link>
+                                onClick={() =>
+                                  navigate(
+                                    createDatasourceViewPath(datasource.slug),
+                                  )
                                 }
                                 dataTest={`datasource-card-${datasource.id}`}
                               />

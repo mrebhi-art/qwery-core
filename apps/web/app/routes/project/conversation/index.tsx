@@ -202,7 +202,9 @@ export default function ConversationIndexPage() {
       <div className="flex h-full min-h-0 flex-1 flex-col">
         <section className="flex shrink-0 flex-col gap-6 px-8 py-6 lg:px-16 lg:py-10">
           <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold">{t('chat:title')}</h1>
+            <h1 className="text-5xl font-bold tracking-tight">
+              {t('chat:title')}
+            </h1>
           </div>
 
           <div className="flex items-center gap-3">

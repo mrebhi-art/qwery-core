@@ -321,7 +321,7 @@ export function ConversationList({
             </div>
           </div>
         )}
-        <CommandList className="max-h-none min-h-0 flex-1 overflow-y-auto [&_[cmdk-item][data-selected=true]]:bg-transparent [&_[cmdk-item][data-selected=true]]:text-inherit">
+        <CommandList className="max-h-none min-h-0 flex-1 overflow-y-auto">
           <CommandEmpty>
             <div className="flex flex-col items-center gap-3 py-8">
               <div className="bg-muted flex size-12 items-center justify-center rounded-full">
@@ -498,12 +498,12 @@ export function ConversationList({
                   }}
                   className={cn(
                     'group relative mx-1 my-0.5 rounded-md transition-all',
-                    'hover:bg-accent/50',
+                    'hover:bg-muted/70 data-[selected=true]:bg-muted/70',
                     conversation.id === currentConversationId &&
-                      'bg-primary/10 hover:bg-primary/20',
+                      'bg-primary/12 hover:bg-primary/22 data-[selected=true]:bg-primary/22',
                     isEditMode &&
                       selectedIds.has(conversation.id) &&
-                      'bg-primary/5 hover:bg-primary/20',
+                      'bg-primary/8 hover:bg-primary/22 data-[selected=true]:bg-primary/22',
                   )}
                 >
                   <div className="flex w-full items-center gap-2 px-2 py-1.5">
@@ -592,11 +592,12 @@ export function ConversationList({
                           }}
                           className={cn(
                             'group relative mx-1 my-0.5 rounded-md transition-all',
-                            'hover:bg-accent/50',
-                            isCurrent && 'bg-primary/10 hover:bg-primary/20',
+                            'hover:bg-muted/70 data-[selected=true]:bg-muted/70',
+                            isCurrent &&
+                              'bg-primary/12 hover:bg-primary/22 data-[selected=true]:bg-primary/22',
                             isEditMode &&
                               isSelected &&
-                              'bg-primary/5 hover:bg-primary/20',
+                              'bg-primary/8 hover:bg-primary/22 data-[selected=true]:bg-primary/22',
                           )}
                         >
                           <div className="flex w-full items-center gap-2 px-2 py-1.5">

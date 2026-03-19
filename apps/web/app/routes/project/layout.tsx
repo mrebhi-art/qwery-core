@@ -26,7 +26,7 @@ import { ProjectPausedOverlay } from './_components/project-paused-overlay';
 // LocalStorage key for persisting notebook sidebar conversation
 const NOTEBOOK_SIDEBAR_CONVERSATION_KEY = 'notebook-sidebar-conversation';
 
-export async function clientLoader(_args: Route.ClientLoaderArgs) {
+export async function loader(_args: Route.LoaderArgs) {
   return {
     layoutState: {
       open: true,
@@ -222,10 +222,14 @@ function SidebarLayoutInner(
               <div className="bg-background w-fit px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
                 <ProjectBreadcrumb />
               </div>
-              <div className="flex-1 overflow-hidden">
-                <div className="h-full px-8 py-6 lg:px-64">
-                  {props.children}
-                </div>
+              <div
+                className={
+                  isNotebookPage
+                    ? 'flex-1 overflow-hidden'
+                    : 'flex-1 overflow-hidden px-8 lg:px-48'
+                }
+              >
+                {props.children}
               </div>
             </div>
           </Page>
@@ -259,6 +263,9 @@ function SidebarLayout(props: Route.ComponentProps & React.PropsWithChildren) {
 function SimpleModeSidebarLayout(
   props: Route.ComponentProps & React.PropsWithChildren,
 ) {
+  const location = useLocation();
+  const isNotebookPage = location.pathname.startsWith('/notebook/');
+
   return (
     <ProjectLayoutWrapper>
       <AgentStatusProvider>
@@ -274,7 +281,15 @@ function SimpleModeSidebarLayout(
               <div className="bg-background w-fit px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
                 <ProjectBreadcrumb />
               </div>
-              <div className="flex-1 overflow-hidden">{props.children}</div>
+              <div
+                className={
+                  isNotebookPage
+                    ? 'flex-1 overflow-hidden'
+                    : 'flex-1 overflow-hidden px-64'
+                }
+              >
+                {props.children}
+              </div>
             </div>
           </Page>
         </SidebarProvider>

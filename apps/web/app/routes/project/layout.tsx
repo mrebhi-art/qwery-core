@@ -211,14 +211,14 @@ function SidebarLayoutInner(
               </AgentSidebar>
             )}
             <div className="flex h-full flex-col">
-              <div className="bg-background w-fit px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
+              <div className="bg-background w-fit px-6 pt-4 pb-3 lg:px-16 lg:pt-6">
                 <ProjectBreadcrumb />
               </div>
               <div
                 className={
                   isNotebookPage
                     ? 'flex-1 overflow-hidden'
-                    : 'flex-1 overflow-hidden px-8 lg:px-48'
+                    : 'flex-1 overflow-hidden px-10 lg:px-52 [--chat-pad-x:2.5rem] lg:[--chat-pad-x:13rem]'
                 }
               >
                 {props.children}
@@ -270,14 +270,14 @@ function SimpleModeSidebarLayout(
               <LayoutFooter />
             </PageFooter>
             <div className="flex h-full flex-col">
-              <div className="bg-background w-fit px-4 pt-4 pb-3 lg:px-12 lg:pt-6">
+              <div className="bg-background w-fit px-6 pt-4 pb-3 lg:px-16 lg:pt-6">
                 <ProjectBreadcrumb />
               </div>
               <div
                 className={
                   isNotebookPage
                     ? 'flex-1 overflow-hidden'
-                    : 'flex-1 overflow-hidden px-64'
+                    : 'flex-1 overflow-hidden px-8 lg:px-48 [--chat-pad-x:1.5rem] lg:[--chat-pad-x:18rem]'
                 }
               >
                 {props.children}

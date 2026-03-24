@@ -167,7 +167,6 @@ const limitedStringOrUndefined = (max: number, label: string) =>
     z.undefined(),
   ]);
 
-const stringOrUndefined = limitedStringOrUndefined(4096, 'Value');
 const baseConfigSchema = z.record(z.string(), z.unknown()).and(
   z.object({
     host: limitedStringOrUndefined(

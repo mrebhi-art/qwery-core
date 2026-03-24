@@ -2023,6 +2023,9 @@ importers:
       '@qwery/domain':
         specifier: workspace:*
         version: link:../domain
+      '@qwery/extensions-sdk':
+        specifier: workspace:*
+        version: link:../extensions-sdk
       '@qwery/shared':
         specifier: workspace:*
         version: link:../shared

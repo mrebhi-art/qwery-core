@@ -13,7 +13,15 @@
     "test:watch": "vitest",
     "eval": "node node_modules/@qwery/evals/bin/evals.mjs run __evals__",
     "evals:report": "node node_modules/@qwery/evals/bin/evals.mjs report __evals__",
-    "evals:preview": "node node_modules/@qwery/evals/bin/evals.mjs preview __evals__"
+    "evals:preview": "node node_modules/@qwery/evals/bin/evals.mjs preview __evals__",
+    "eval:suite": "npx tsx evals-regression/suites/ask-eval-suite.ts",
+    "eval:suite:sql": "npx tsx evals-regression/suites/sql-quality-eval-suite.ts",
+    "eval:suite:chart": "npx tsx evals-regression/suites/chart-generation-eval-suite.ts",
+    "eval:suite:tools": "npx tsx evals-regression/suites/tool-sequence-eval-suite.ts",
+    "eval:suite:safety": "npx tsx evals-regression/suites/destructive-safety-eval-suite.ts",
+    "eval:suite:intents": "npx tsx evals-regression/suites/expanded-intent-eval-suite.ts",
+    "eval:suite:ask": "npx tsx evals-regression/suites/ask-eval-suite.ts",
+    "eval:regression": "node evals-regression/runner.mjs"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -66,6 +74,7 @@
     "@qwery/prettier-config": "workspace:*",
     "@qwery/repository-in-memory": "workspace:*",
     "@qwery/tailwind-config": "workspace:*",
+    "@qwery/tracing-sdk": "workspace:*",
     "@qwery/tsconfig": "workspace:*",
     "@qwery/ui": "workspace:*",
     "@radix-ui/react-icons": "^1.3.2",

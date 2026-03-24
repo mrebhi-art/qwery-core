@@ -13,6 +13,8 @@
     "*.ts",
     "*.tsx",
     "src",
+    "evals-regression",
+    "../domain/src"
   ],
   "exclude": [
     "node_modules",

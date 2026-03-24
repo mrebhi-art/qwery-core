@@ -248,6 +248,47 @@ describe('discovery', () => {
       }
     });
 
+    it('returns darwin app bundle extensions path when platform is darwin', () => {
+      const original = process.env.QWERY_EXTENSIONS_PATH;
+      const originalPlatform = process.platform;
+      delete process.env.QWERY_EXTENSIONS_PATH;
+      Object.defineProperty(process, 'platform', {
+        value: 'darwin',
+        configurable: true,
+        writable: true,
+      });
+      try {
+        const paths = getDefaultExtensionPaths();
+        expect(paths).toContain(
+          '/Applications/Qwery.app/Contents/Resources/extensions',
+        );
+      } finally {
+        Object.defineProperty(process, 'platform', {
+          value: originalPlatform,
+          configurable: true,
+          writable: true,
+        });
+        if (original !== undefined) {
+          process.env.QWERY_EXTENSIONS_PATH = original;
+        }
+      }
+    });
+
+    it('returns platform defaults even when monorepo extensions path is absent', () => {
+      const original = process.env.QWERY_EXTENSIONS_PATH;
+      delete process.env.QWERY_EXTENSIONS_PATH;
+      const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+      try {
+        const paths = getDefaultExtensionPaths();
+        expect(paths.length).toBeGreaterThan(0);
+      } finally {
+        existsSpy.mockRestore();
+        if (original !== undefined) {
+          process.env.QWERY_EXTENSIONS_PATH = original;
+        }
+      }
+    });
+
     it('returns linux paths when platform is linux with APPDIR', () => {
       const original = process.env.QWERY_EXTENSIONS_PATH;
       const originalPlatform = process.platform;

@@ -10,15 +10,7 @@ import {
 import { useNavigate, useParams, Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 
-import {
-  Pencil,
-  X,
-  Database,
-  Loader2,
-  Zap,
-  ArrowLeft,
-  Check,
-} from 'lucide-react';
+import { Pencil, X, Loader2, Zap, ArrowLeft, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
@@ -375,19 +367,6 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
           <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
           <p className="text-muted-foreground text-sm">
             <Trans i18nKey="datasources:loading" />
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!extension) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Database className="text-muted-foreground/50 h-12 w-12" />
-          <p className="text-muted-foreground text-sm">
-            <Trans i18nKey="datasources:notFound" />
           </p>
         </div>
       </div>

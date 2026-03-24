@@ -16,6 +16,7 @@ import {
   createValidationErrorResponse,
 } from '../lib/http-utils';
 import { Code } from '@qwery/domain/common';
+import { fetchWithSsrfProtection, SsrfBlockedError } from '../lib/ssrf-guard';
 
 const VALIDATE_URL_TIMEOUT_MS = 15_000;
 const VALIDATE_URL_MAX_BYTES = 5 * 1024 * 1024;
@@ -65,25 +66,14 @@ export function createDatasourcesRoutes(
         return c.json({ error: 'Invalid request: url is required' }, 400);
       }
       const { url } = parsed.data;
-      let parsedUrl: URL;
-      try {
-        parsedUrl = new URL(url);
-      } catch {
-        return c.json({ error: 'Invalid URL' }, 400);
-      }
-      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-        return c.json({ error: 'URL must use http or https' }, 400);
-      }
-
       const controller = new AbortController();
       const timeout = setTimeout(
         () => controller.abort(),
         VALIDATE_URL_TIMEOUT_MS,
       );
       try {
-        const res = await fetch(url, {
+        const res = await fetchWithSsrfProtection(url, {
           signal: controller.signal,
-          redirect: 'follow',
           headers: { Accept: 'application/json' },
         });
         clearTimeout(timeout);
@@ -109,6 +99,9 @@ export function createDatasourcesRoutes(
         }
       } catch (err) {
         clearTimeout(timeout);
+        if (err instanceof SsrfBlockedError) {
+          return c.json({ error: err.message }, 400);
+        }
         if (err instanceof Error && err.name === 'AbortError') {
           return c.json({ error: 'Request timed out' }, 408);
         }
@@ -138,33 +131,16 @@ export function createDatasourcesRoutes(
         );
       }
       const { url, expectedFormat } = parsed.data;
-      let parsedUrl: URL;
-      try {
-        parsedUrl = new URL(url);
-      } catch {
-        return c.json({
-          valid: false,
-          error: 'Invalid URL',
-        });
-      }
-      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-        return c.json({
-          valid: false,
-          error: 'URL must use http or https',
-        });
-      }
-
       const controller = new AbortController();
       const timeout = setTimeout(
         () => controller.abort(),
         VALIDATE_URL_TIMEOUT_MS,
       );
       try {
-        const res = await fetch(url, {
+        const res = await fetchWithSsrfProtection(url, {
           // TextDecoder requires a valid encoding; default is utf-8.
           // We only read a small prefix for JSON/CSV; Parquet is inspected via magic bytes.
           signal: controller.signal,
-          redirect: 'follow',
         });
         clearTimeout(timeout);
         if (!res.ok) {
@@ -242,6 +218,12 @@ export function createDatasourcesRoutes(
         return c.json({ valid: false, error: 'Unsupported format' });
       } catch (err) {
         clearTimeout(timeout);
+        if (err instanceof SsrfBlockedError) {
+          return c.json({
+            valid: false,
+            error: err.message,
+          });
+        }
         if (err instanceof Error && err.name === 'AbortError') {
           return c.json({
             valid: false,

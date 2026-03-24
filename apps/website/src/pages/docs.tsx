@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DocContent } from '@/components/DocContent';
 import { getDocRaw } from '@/lib/docs-manifest';
+import { GITHUB_URLS } from '@/lib/github';
 import logoImg from '@/assets/logo.svg';
 
 function Container({ children }: { children: React.ReactNode }) {
@@ -106,7 +107,7 @@ export default function Docs({ params = {} }: DocsProps) {
                 </Button>
               </Link>
               <a
-                href="https://github.com/Guepard-Corp/qwery-core"
+                href={GITHUB_URLS.repo}
                 target="_blank"
                 rel="noreferrer"
                 data-testid="link-github"

@@ -16,6 +16,7 @@
   "exports": {
     "./logger": "./src/logger/index.ts",
     "./model-cost": "./src/model-cost/index.ts",
+    "./github": "./src/github.ts",
     "./utils": "./src/utils.ts",
     "./workspace": "./src/workspace.ts",
     "./hooks": "./src/hooks/index.ts",

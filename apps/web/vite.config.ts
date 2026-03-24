@@ -6,8 +6,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
+import { execSync } from 'node:child_process';
 
 import tailwindCssVitePlugin from '@qwery/tailwind-config/vite';
+
+const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf-8'));
+const gitHash = execSync('git rev-parse --short HEAD').toString().trim();
 
 // Plugin to set correct MIME type for WASM files and extension drivers
 function wasmMimeTypePlugin(): Plugin {
@@ -61,8 +65,19 @@ function wasmMimeTypePlugin(): Plugin {
   };
 }
 
+const DEV_PORT = Number.parseInt(process.env.PORT ?? '', 10);
+const DEV_SERVER_PORT =
+  Number.isFinite(DEV_PORT) && DEV_PORT > 0 ? DEV_PORT : 3000;
+const DEV_SERVER_HOST = process.env.HOST || '0.0.0.0';
+
 const ALLOWED_HOSTS =
-  process.env.NODE_ENV === 'development' ? ['host.docker.internal'] : [];
+  process.env.NODE_ENV === 'development'
+    ? ['host.docker.internal', '.localhost', 'localhost']
+    : [];
+
+// /api proxy target: default 4096; Portless sets VITE_DEV_API_PROXY (see web:dev:portless).
+const DEV_API_PROXY_TARGET =
+  process.env.VITE_DEV_API_PROXY ?? 'http://localhost:4096';
 
 // Polyfill require() in ESM for deps that use it (e.g. turndown -> @mixmark-io/domino)
 function requirePolyfillPlugin(): Plugin {
@@ -82,9 +97,14 @@ function requirePolyfillPlugin(): Plugin {
 }
 
 export default defineConfig(({ command }) => ({
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageJson.version),
+    'import.meta.env.VITE_GIT_HASH': JSON.stringify(gitHash),
+  },
   resolve: {
-    // Dedupe i18next and react-i18next to ensure single instance across all packages
-    // This is critical for monorepo setups where multiple packages use these libraries
+    alias: {
+      '~': path.resolve(process.cwd()),
+    },
     dedupe: ['i18next', 'react-i18next', 'react', 'react-dom'],
   },
   ssr: {
@@ -112,14 +132,15 @@ export default defineConfig(({ command }) => ({
     ...tailwindCssVitePlugin.plugins,
   ],
   server: {
-    host: '0.0.0.0',
-    port: 3000,
+    host: DEV_SERVER_HOST,
+    port: DEV_SERVER_PORT,
+    strictPort: Boolean(process.env.PORT),
     allowedHosts: ALLOWED_HOSTS,
     proxy: {
       // Proxy /api to apps/server when client uses relative URLs (VITE_API_URL unset)
       // Enables breadcrumb, orgs, projects, datasources etc. to load from server
       '/api': {
-        target: 'http://localhost:4096',
+        target: DEV_API_PROXY_TARGET,
         changeOrigin: true,
       },
     },
@@ -128,6 +149,16 @@ export default defineConfig(({ command }) => ({
     sourcemap: false, // Disable sourcemaps to avoid resolution errors in monorepo
     manifest: true, // Enable manifest generation for React Router
     rollupOptions: {
+      onwarn(warning, defaultHandler) {
+        if (
+          warning.message.includes(
+            "Error when using sourcemap for reporting an error: Can't resolve original location of error.",
+          )
+        ) {
+          return;
+        }
+        defaultHandler(warning);
+      },
       external: (id: string) => {
         if (id === 'fsevents') return true;
         if (id === '@duckdb/node-api') return true;

@@ -40,6 +40,7 @@ import {
   useUpdateConversation,
 } from '~/lib/mutations/use-conversation';
 import { ERROR_KEYS, getErrorKey } from '~/lib/utils/error-key';
+import { useNotebookSidebarOpenStore } from '~/lib/store/use-notebook-sidebar-open';
 
 export default function NotebookPage() {
   const { t } = useTranslation();
@@ -48,6 +49,7 @@ export default function NotebookPage() {
   const slug = params.slug as string;
   const { repositories, workspace } = useWorkspace();
   const navigate = useNavigate();
+  const { open: notebookSidebarOpen } = useNotebookSidebarOpenStore();
   const notebookRepository = repositories.notebook;
   const datasourceRepository = repositories.datasource;
   const notebook = useGetNotebook(notebookRepository, slug);
@@ -372,13 +374,21 @@ export default function NotebookPage() {
           conversationSlug = updatedConversation.slug;
         }
       } else {
-        // Create new conversation
+        const uuidRegex =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(notebookProjectId)) {
+          toast.error(
+            'Notebook project id is invalid, cannot start conversation',
+          );
+          setLoadingCellId(null);
+          return;
+        }
         const { v4: uuidv4 } = await import('uuid');
         const notebookTitle = `Notebook - ${notebook.data.id}`;
 
         const newConversation = await createConversationMutation.mutateAsync({
           title: notebookTitle,
-          projectId: notebookProjectId || '',
+          projectId: notebookProjectId,
           taskId: uuidv4(),
           datasources: [datasourceId],
           seedMessage: '',
@@ -1051,7 +1061,13 @@ export default function NotebookPage() {
 
   // Convert NotebookUseCaseDto to Notebook format
   return (
-    <div className="h-full w-full overflow-hidden">
+    <div
+      className={
+        notebookSidebarOpen
+          ? 'h-full w-full overflow-hidden px-4 lg:px-8'
+          : 'h-full w-full overflow-hidden px-4 lg:px-12'
+      }
+    >
       {notebook.isLoading && <Skeleton className="h-full w-full" />}
       {notebook.isError && <Navigate to="/404" />}
       {normalizedNotebook && (

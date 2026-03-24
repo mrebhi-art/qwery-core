@@ -6,7 +6,7 @@ import {
 } from '@react-router/dev/routes';
 
 const rootRoutes = [
-  route('version', 'routes/version.ts'),
+  route('version', 'routes/version.tsx'),
   route('healthcheck', 'routes/healthcheck.ts'),
   route('qwery/*', 'routes/ingest.$.ts'),
 ];
@@ -28,6 +28,7 @@ const projectLayout = layout('routes/project/layout.tsx', [
   route('notebook/:slug', 'routes/project/notebook.tsx'),
   route('prj/:slug/notebooks', 'routes/project/notebooks/index.tsx'),
   route('prj/:slug/ds', 'routes/project/datasources/index.tsx'),
+  route('prj/:slug/ds/:id/new', 'routes/project/datasources/new.tsx'),
   route('prj/:slug/ds/new', 'routes/project/datasources/sources.tsx'),
   route('prj/:slug/playground', 'routes/project/playground.tsx'),
   route('prj/:slug/c', 'routes/project/conversation/index.tsx'),

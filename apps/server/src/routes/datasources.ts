@@ -114,8 +114,7 @@ export function createDatasourcesRoutes(
         }
         return c.json(
           {
-            error:
-              err instanceof Error ? err.message : 'Failed to fetch URL',
+            error: err instanceof Error ? err.message : 'Failed to fetch URL',
           },
           502,
         );

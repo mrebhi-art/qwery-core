@@ -7,6 +7,7 @@
   "globalEnv": [
     "VITE_SITE_URL",
     "VITE_SENTRY_DSN",
+    "VITE_DEV_API_PROXY",
     "LOGGER"
   ],
   "tasks": {
@@ -29,6 +30,9 @@
       "env": [
         "NODE_ENV"
       ]
+    },
+    "server#build": {
+      "outputs": ["dist/**"]
     },
     "dev": {
       "persistent": true,

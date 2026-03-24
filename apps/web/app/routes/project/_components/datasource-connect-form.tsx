@@ -1,6 +1,12 @@
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { z } from 'zod';
 import { z as zLib } from 'zod';
 import { Loader2, Pencil, Shuffle, Check } from 'lucide-react';
@@ -60,6 +66,7 @@ import {
   getErrorKey,
   getFirstZodValidationMessage,
 } from '~/lib/utils/error-key';
+import { shouldInvertDatasourceIcon } from '@qwery/shared/utils';
 import { ZodErrorVisualizer } from '@qwery/ui/qwery/datasource';
 import { ZodError } from 'zod';
 
@@ -389,7 +396,9 @@ export function DatasourceConnectForm({
     },
     (error) => {
       toast.error(getErrorKey(error, t));
-      void getLogger().then((logger) => logger.error('Create datasource failed', { error }));
+      void getLogger().then((logger) =>
+        logger.error('Create datasource failed', { error }),
+      );
       setIsConnecting(false);
     },
   );
@@ -403,7 +412,9 @@ export function DatasourceConnectForm({
     },
     (error) => {
       toast.error(getErrorKey(error, t));
-      void getLogger().then((logger) => logger.error('Update datasource failed', { error }));
+      void getLogger().then((logger) =>
+        logger.error('Update datasource failed', { error }),
+      );
       setIsConnecting(false);
     },
   );
@@ -417,7 +428,9 @@ export function DatasourceConnectForm({
     },
     (error) => {
       toast.error(getErrorKey(error, t));
-      void getLogger().then((logger) => logger.error('Delete datasource failed', { error }));
+      void getLogger().then((logger) =>
+        logger.error('Delete datasource failed', { error }),
+      );
     },
   );
 
@@ -579,8 +592,6 @@ export function DatasourceConnectForm({
     const datasourceKind =
       runtime === 'browser' ? DatasourceKind.EMBEDDED : DatasourceKind.REMOTE;
 
-    const userId = workspace.userId;
-
     createDatasourceMutation.mutate({
       projectId,
       name: datasourceName.trim() || generateRandomName(),
@@ -589,7 +600,7 @@ export function DatasourceConnectForm({
       datasource_driver: driver?.id || '',
       datasource_kind: datasourceKind,
       config: validData,
-      createdBy: userId,
+      createdBy: workspace.userId,
     });
   }, [
     t,
@@ -699,8 +710,7 @@ export function DatasourceConnectForm({
   const isActionDisabled = isConnecting || isPending;
   const isTestConnectionDisabled = isActionDisabled;
   const isSubmitDisabled =
-    isActionDisabled ||
-    (existingDatasource ? false : isTestConnectionLoading);
+    isActionDisabled || (existingDatasource ? false : isTestConnectionLoading);
 
   const handleDeleteClick = useCallback(() => setIsDeleteDialogOpen(true), []);
 
@@ -737,7 +747,7 @@ export function DatasourceConnectForm({
                   alt={extensionMeta.name}
                   className={cn(
                     'h-9 w-9 object-contain',
-                    extensionId === 'json-online' && 'dark:invert',
+                    shouldInvertDatasourceIcon(extensionId) && 'dark:invert',
                   )}
                 />
               )}
@@ -837,8 +847,8 @@ export function DatasourceConnectForm({
                   onValidityChange={setSchemaValid}
                   defaultValues={
                     existingDatasource?.config as
-                    | Record<string, unknown>
-                    | undefined
+                      | Record<string, unknown>
+                      | undefined
                   }
                 />
               ) : usePresetForm ? (
@@ -857,7 +867,7 @@ export function DatasourceConnectForm({
               ) : (
                 <FormRenderer
                   schema={effectiveSchema}
-                  onSubmit={() => { }}
+                  onSubmit={() => {}}
                   formId={formId ?? 'datasource-form'}
                   locale={i18n.resolvedLanguage}
                   onFormReady={(values) =>
@@ -866,16 +876,16 @@ export function DatasourceConnectForm({
                   onValidityChange={setSchemaValid}
                   defaultValues={
                     existingDatasource?.config as
-                    | Record<string, unknown>
-                    | undefined
+                      | Record<string, unknown>
+                      | undefined
                   }
                 />
               )}
               {urlValidation.gsheetHintUrl && extensionId === 'csv-online' ? (
                 <div className="border-border/40 bg-muted/20 text-muted-foreground mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs">
                   <span className="max-w-xs">
-                    This looks like a Google Sheets link. For the best experience, use the Google
-                    Sheets datasource instead.
+                    This looks like a Google Sheets link. For the best
+                    experience, use the Google Sheets datasource instead.
                   </span>
                   <Button
                     type="button"
@@ -890,13 +900,13 @@ export function DatasourceConnectForm({
                   </Button>
                 </div>
               ) : urlValidation.error ? (
-              <p
-                className="border-destructive/30 bg-destructive/5 text-destructive dark:border-destructive/40 dark:bg-destructive/10 mt-1 flex gap-2 rounded-md border px-3 py-1.5 text-xs font-medium leading-snug dark:text-red-300"
-                role="alert"
-                data-test="datasource-url-validation-error"
-              >
-                {urlValidation.error}
-              </p>
+                <p
+                  className="border-destructive/30 bg-destructive/5 text-destructive dark:border-destructive/40 dark:bg-destructive/10 mt-1 flex gap-2 rounded-md border px-3 py-1.5 text-xs leading-snug font-medium dark:text-red-300"
+                  role="alert"
+                  data-test="datasource-url-validation-error"
+                >
+                  {urlValidation.error}
+                </p>
               ) : null}
               {validationError && (
                 <ZodErrorVisualizer

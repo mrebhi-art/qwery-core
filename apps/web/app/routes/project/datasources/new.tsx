@@ -62,7 +62,7 @@ import { DatasourceS3Fields } from '../_components/datasource-s3-fields';
 
 import type { Route } from './+types/new';
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const extension = DATASOURCES.find((ds) => ds.id === params.id);
 
   if (!extension) {
@@ -99,7 +99,7 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
 
   const extension = useGetExtension(extensionId);
   const extensionSchema = useExtensionSchema(extensionId);
-  const [, setFormValid] = useState(false);
+  const [formValid, setFormValid] = useState(false);
 
   const testConnectionMutation = useTestConnection(
     (result) => {
@@ -129,7 +129,9 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
     },
     (error) => {
       toast.error(getErrorKey(error, t));
-      void getLogger().then((logger) => logger.error('Create datasource failed', { error }));
+      void getLogger().then((logger) =>
+        logger.error('Create datasource failed', { error }),
+      );
     },
   );
 
@@ -137,8 +139,10 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
     createDatasourceMutation.isPending || testConnectionMutation.isPending;
 
   useEffect(() => {
-    setFormValues(null);
-    setDatasourceName(generateRandomName());
+    startTransition(() => {
+      setFormValues(null);
+      setDatasourceName(generateRandomName());
+    });
   }, [extensionId]);
 
   useEffect(() => {
@@ -190,7 +194,10 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
       if (schema) {
         const parsed = schema.safeParse(values);
         if (parsed.success && parsed.data) {
-          return { success: true, config: parsed.data as Record<string, unknown> };
+          return {
+            success: true,
+            config: parsed.data as Record<string, unknown>,
+          };
         }
         const msg =
           parsed.error?.issues?.[0]?.message ?? 'Invalid configuration';
@@ -387,8 +394,8 @@ export default function DatasourcesPage({ loaderData }: Route.ComponentProps) {
     );
   }
 
-  const isTestConnectionDisabled = isMutationPending;
-  const isSubmitDisabled = isMutationPending;
+  const isTestConnectionDisabled = isMutationPending || !formValid;
+  const isSubmitDisabled = isMutationPending || !formValid;
 
   return (
     <div className="bg-background flex h-full flex-col">

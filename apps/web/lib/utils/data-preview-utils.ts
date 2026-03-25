@@ -1,5 +1,7 @@
 import * as duckdb from '@duckdb/duckdb-wasm';
 import type { DatasourceResultSet } from '@qwery/domain/entities';
+import { getLogger } from '@qwery/shared/logger';
+import { escapeSqlStringLiteral } from '@qwery/shared/sql-string-literal';
 import { driverCommand } from '~/lib/repositories/api-client';
 
 let db: duckdb.AsyncDuckDB | null = null;
@@ -33,6 +35,7 @@ export const DATA_PREVIEW_CONFIG = {
   MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
   INITIAL_LIMIT: 100, // Fetch 100 rows for preview
   ITEMS_PER_PAGE: 20, // Show 20 rows per page (5 pages total)
+  TIMEOUT_MS: 15_000, // Hard timeout for preview fetch
 } as const;
 
 export interface DataFetchResult {
@@ -50,9 +53,10 @@ async function fetchDataFromServer(
 ): Promise<DataFetchResult> {
   try {
     const datasourceProvider =
-      format === 'parquet' ? 'parquet-online' : 'gsheet-csv';
+      format === 'parquet' ? 'parquet-online' : 'csv-online';
     const driverId =
-      format === 'parquet' ? 'parquet-online.duckdb' : 'gsheet-csv.csv';
+      format === 'parquet' ? 'parquet-online.duckdb' : 'csv-online.duckdb';
+    const safePath = escapeSqlStringLiteral(url);
 
     const result = await driverCommand<DatasourceResultSet>('query', {
       datasourceProvider,
@@ -60,8 +64,8 @@ async function fetchDataFromServer(
       config: { url },
       sql:
         format === 'parquet'
-          ? `SELECT * FROM read_parquet('${url}') LIMIT ${limit}`
-          : `SELECT * FROM read_csv_auto('${url}') LIMIT ${limit}`,
+          ? `SELECT * FROM read_parquet('${safePath}') LIMIT ${limit}`
+          : `SELECT * FROM read_csv_auto('${safePath}') LIMIT ${limit}`,
     });
 
     return { data: result.rows ?? null, error: null };
@@ -74,7 +78,7 @@ async function fetchDataFromServer(
 }
 
 /**
- * Generic data fetcher using DuckDB-Wasm with Server Fallback
+ * Generic data fetcher using DuckDB-Wasm with Server Fallback + timeout
  */
 async function fetchData(
   url: string,
@@ -83,88 +87,108 @@ async function fetchData(
 ): Promise<DataFetchResult> {
   const fileName = `remote_${Math.random().toString(36).substring(7)}.${format}`;
 
-  try {
-    // Try to check file size via HEAD request if possible
+  const coreFetch = async (): Promise<DataFetchResult> => {
     try {
-      const headResponse = await fetch(url, { method: 'HEAD' });
-      const contentLength = headResponse.headers.get('content-length');
-      if (
-        contentLength &&
-        parseInt(contentLength, 10) > DATA_PREVIEW_CONFIG.MAX_FILE_SIZE
-      ) {
+      // Try to check file size via HEAD request if possible
+      try {
+        const headResponse = await fetch(url, { method: 'HEAD' });
+        const contentLength = headResponse.headers.get('content-length');
+        if (
+          contentLength &&
+          parseInt(contentLength, 10) > DATA_PREVIEW_CONFIG.MAX_FILE_SIZE
+        ) {
+          return {
+            data: null,
+            error: `File too large (${Math.round(parseInt(contentLength, 10) / 1024 / 1024)}MB). Preview limit is ${DATA_PREVIEW_CONFIG.MAX_FILE_SIZE / 1024 / 1024}MB.`,
+          };
+        }
+      } catch (e) {
+        void getLogger().then((logger) =>
+          logger.warn(
+            { err: e },
+            'Data preview HEAD size check failed, continuing',
+          ),
+        );
+      }
+
+      const duckDB = await getDuckDB();
+      await duckDB.registerFileURL(
+        fileName,
+        url,
+        duckdb.DuckDBDataProtocol.HTTP,
+        false,
+      );
+      const conn = await duckDB.connect();
+
+      try {
+        const safeFile = escapeSqlStringLiteral(fileName);
+        const query =
+          format === 'parquet'
+            ? `SELECT * FROM read_parquet('${safeFile}') LIMIT ${limit}`
+            : `SELECT * FROM read_csv_auto('${safeFile}') LIMIT ${limit}`;
+
+        const result = await conn.query(query);
+
+        const rows = result.toArray().map((row) => {
+          const obj: Record<string, unknown> = {};
+          for (const key of Object.keys(row)) {
+            let val = row[key];
+            if (typeof val === 'bigint') {
+              val = val.toString();
+            }
+            obj[key] = val;
+          }
+          return obj;
+        });
+
+        return { data: rows, error: null };
+      } catch (queryError: unknown) {
+        console.error(`DuckDB Browser ${format} Error:`, queryError);
+        const errorMessage =
+          queryError instanceof Error ? queryError.message : '';
+        if (
+          errorMessage.includes('XMLHttpRequest') ||
+          errorMessage.includes('NetworkError') ||
+          errorMessage.includes('CORS')
+        ) {
+          return fetchDataFromServer(url, limit, format);
+        }
         return {
           data: null,
-          error: `File too large (${Math.round(parseInt(contentLength, 10) / 1024 / 1024)}MB). Preview limit is ${DATA_PREVIEW_CONFIG.MAX_FILE_SIZE / 1024 / 1024}MB.`,
+          error:
+            queryError instanceof Error
+              ? queryError.message
+              : `Failed to query ${format} file`,
         };
-      }
-    } catch (e) {
-      // HEAD might fail (CORS), we continue and let DuckDB handle it
-      console.warn('File size check failed, continuing...', e);
-    }
-
-    const duckDB = await getDuckDB();
-    await duckDB.registerFileURL(
-      fileName,
-      url,
-      duckdb.DuckDBDataProtocol.HTTP,
-      false,
-    );
-    const conn = await duckDB.connect();
-
-    try {
-      const query =
-        format === 'parquet'
-          ? `SELECT * FROM read_parquet('${fileName}') LIMIT ${limit}`
-          : `SELECT * FROM read_csv_auto('${fileName}') LIMIT ${limit}`;
-
-      const result = await conn.query(query);
-
-      const rows = result.toArray().map((row) => {
-        const obj: Record<string, unknown> = {};
-        for (const key of Object.keys(row)) {
-          let val = row[key];
-          if (typeof val === 'bigint') {
-            val = val.toString();
-          }
-          obj[key] = val;
+      } finally {
+        await conn.close();
+        try {
+          await duckDB.dropFile(fileName);
+        } catch {
+          // Ignore drop errors
         }
-        return obj;
-      });
-
-      return { data: rows, error: null };
-    } catch (queryError: unknown) {
-      console.error(`DuckDB Browser ${format} Error:`, queryError);
-      const errorMessage =
-        queryError instanceof Error ? queryError.message : '';
-      if (
-        errorMessage.includes('XMLHttpRequest') ||
-        errorMessage.includes('NetworkError') ||
-        errorMessage.includes('CORS')
-      ) {
-        return fetchDataFromServer(url, limit, format);
       }
-      return {
-        data: null,
-        error:
-          queryError instanceof Error
-            ? queryError.message
-            : `Failed to query ${format} file`,
-      };
-    } finally {
-      await conn.close();
-      try {
-        await duckDB.dropFile(fileName);
-      } catch {
-        // Ignore drop errors
-      }
+    } catch (error) {
+      void getLogger().then((logger) =>
+        logger.warn(
+          { err: error, format },
+          'DuckDB initialization failed, trying server fallback',
+        ),
+      );
+      return fetchDataFromServer(url, limit, format);
     }
-  } catch (error) {
-    console.warn(
-      `DuckDB initialization failed for ${format}, trying server fallback...`,
-      error,
-    );
-    return fetchDataFromServer(url, limit, format);
-  }
+  };
+
+  const timeoutPromise = new Promise<DataFetchResult>((resolve) => {
+    setTimeout(() => {
+      resolve({
+        data: null,
+        error: 'Preview timed out. Try again or reduce file size.',
+      });
+    }, DATA_PREVIEW_CONFIG.TIMEOUT_MS);
+  });
+
+  return Promise.race([coreFetch(), timeoutPromise]);
 }
 
 export const fetchParquetData = (

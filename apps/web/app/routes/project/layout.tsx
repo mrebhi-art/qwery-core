@@ -20,6 +20,7 @@ import {
   useNotebookSidebar,
 } from '~/lib/context/notebook-sidebar-context';
 import { ProjectProvider, ProjectGuard } from '~/lib/context/project-context';
+import { DatasourceAddedFlashProvider } from '~/lib/context/datasource-added-flash-context';
 import { useNotebookSidebarOpenStore } from '~/lib/store/use-notebook-sidebar-open';
 import { ProjectPausedOverlay } from './_components/project-paused-overlay';
 
@@ -236,7 +237,7 @@ function ProjectLayoutWrapper({ children }: React.PropsWithChildren) {
     <ProjectProvider>
       <ProjectGuard>
         <ProjectPausedOverlay />
-        {children}
+        <DatasourceAddedFlashProvider>{children}</DatasourceAddedFlashProvider>
       </ProjectGuard>
     </ProjectProvider>
   );

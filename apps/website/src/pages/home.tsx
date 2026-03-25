@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import logoImg from '@/assets/logo.svg';
+import { GITHUB_URLS } from '@/lib/github';
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -57,7 +58,7 @@ function TopNav() {
               data-testid="nav-links"
             >
               <a
-                href="https://github.com/Guepard-Corp/qwery-core"
+                href={GITHUB_URLS.repo}
                 target="_blank"
                 rel="noreferrer"
                 className="text-muted-foreground hover:text-foreground inline-flex items-center gap-2 text-sm transition"
@@ -517,7 +518,7 @@ function Footer() {
             data-testid="grid-footer-links"
           >
             <a
-              href="https://github.com/Guepard-Corp/qwery-core"
+              href={GITHUB_URLS.repo}
               target="_blank"
               rel="noreferrer"
               className="border-foreground/80 text-muted-foreground hover:text-foreground sm:border-foreground/80 flex items-center justify-center gap-2 border-t-2 px-4 py-5 text-sm font-semibold transition sm:border-t-0 sm:border-r-2"

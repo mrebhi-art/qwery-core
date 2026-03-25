@@ -459,6 +459,46 @@ describe('extensions-loader', () => {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
     });
+
+    it('attempts browser runtime dynamic import path', async () => {
+      const originalWindow = (
+        globalThis as unknown as {
+          window?: { location: { origin: string } };
+        }
+      ).window;
+
+      try {
+        const driverId = 'browser.test.driver';
+
+        (
+          globalThis as unknown as {
+            window?: { location: { origin: string } };
+          }
+        ).window = {
+          location: { origin: 'http://localhost:3000' },
+        };
+
+        await expect(
+          getDriverInstance(
+            {
+              id: driverId,
+              name: 'Browser Test',
+              runtime: 'browser',
+              entry: './dist/driver.js',
+            },
+            { config: {} },
+          ),
+        ).rejects.toThrow(
+          /dynamic import callback|Cannot find module|Failed to fetch/i,
+        );
+      } finally {
+        (
+          globalThis as unknown as {
+            window?: { location: { origin: string } };
+          }
+        ).window = originalWindow;
+      }
+    });
   });
 
   describe('loadExtensionSchemaForProvider', () => {

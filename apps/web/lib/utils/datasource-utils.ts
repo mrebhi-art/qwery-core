@@ -5,10 +5,6 @@
 
 import { z } from 'zod';
 import type { ExtensionDefinition } from '@qwery/extensions-sdk';
-import {
-  parseGoogleSheetsUrl,
-  convertGoogleSheetsToEmbedUrl,
-} from './google-sheets-preview';
 
 /** Minimal extension meta for validation and preview (from ExtensionDefinition). */
 export type DatasourceExtensionMeta = Pick<
@@ -18,6 +14,23 @@ export type DatasourceExtensionMeta = Pick<
 
 const GSHEET_HOST_REGEX = /^(?:[a-z0-9-]+\.)?docs\.google\.com$/i;
 const GSHEET_PATH_REGEX = /^\/spreadsheets\/d\//;
+
+/** True if URL path looks like a direct data file (.json, .csv, .parquet, etc.), not a Google Sheets link. */
+export function isDataFileUrl(url: string | null | undefined): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const t = url.trim();
+  try {
+    const parsed = new URL(t.startsWith('http') ? t : `https://${t}`);
+    const path = parsed.pathname.toLowerCase();
+    return (
+      path.endsWith('.json') ||
+      path.endsWith('.csv') ||
+      path.endsWith('.parquet')
+    );
+  } catch {
+    return false;
+  }
+}
 
 export function isGsheetLikeUrl(url: string | null | undefined): boolean {
   if (!url) return false;
@@ -209,6 +222,27 @@ const GoogleSheetsUrlSchema = z.string().refine(
   },
 );
 
+function getDataFileFormatFromUrl(
+  url: string,
+): 'json' | 'csv' | 'parquet' | null {
+  try {
+    const parsed = new URL(
+      url.startsWith('http://') || url.startsWith('https://')
+        ? url
+        : `https://${url}`,
+    );
+    const pathname = parsed.pathname.toLowerCase();
+    if (pathname.endsWith('.json') || pathname.includes('.json?'))
+      return 'json';
+    if (pathname.endsWith('.parquet') || pathname.includes('.parquet?'))
+      return 'parquet';
+    if (pathname.endsWith('.csv') || pathname.includes('.csv?')) return 'csv';
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Validates a URL using extension metadata (previewUrlKind from extension definition).
  */
@@ -222,6 +256,7 @@ export function validateDatasourceUrl(
 
   const value = url.trim();
   const kind = extensionMeta?.previewUrlKind;
+  const expectedFormat = extensionMeta?.previewDataFormat;
 
   if (kind === 'embeddable' && isGsheetLikeUrl(value)) {
     const result = GoogleSheetsUrlSchema.safeParse(value);
@@ -241,6 +276,20 @@ export function validateDatasourceUrl(
         isValid: false,
         error: 'Please enter a valid URL (must start with http:// or https://)',
       };
+    }
+
+    if (
+      expectedFormat === 'json' ||
+      expectedFormat === 'csv' ||
+      expectedFormat === 'parquet'
+    ) {
+      const actualFormat = getDataFileFormatFromUrl(value);
+      if (actualFormat && actualFormat !== expectedFormat) {
+        return {
+          isValid: false,
+          error: `This datasource expects a .${expectedFormat} file URL.`,
+        };
+      }
     }
   }
 
@@ -286,16 +335,12 @@ export function getDatasourcePreviewUrl(
     | undefined;
 
   if (kind === 'embeddable' && sharedLink && isGsheetLikeUrl(sharedLink)) {
-    const embedUrl = convertGoogleSheetsToEmbedUrl(sharedLink);
-    if (embedUrl) return embedUrl;
-
-    const urlInfo = parseGoogleSheetsUrl(sharedLink);
-    if (urlInfo) {
-      if (urlInfo.isPublishedUrl) {
-        return `https://docs.google.com/spreadsheets/d/e/${urlInfo.sheetId}/pubhtml?widget=true&headers=false&gid=${urlInfo.gid}`;
-      }
-      return `https://docs.google.com/spreadsheets/d/${urlInfo.sheetId}/pubhtml?widget=true&headers=false&gid=${urlInfo.gid}`;
-    }
+    const trimmed = sharedLink.trim();
+    const withProtocol =
+      trimmed.startsWith('http://') || trimmed.startsWith('https://')
+        ? trimmed
+        : `https://${trimmed}`;
+    return withProtocol;
   }
 
   if (kind === 'data-file') {

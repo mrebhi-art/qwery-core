@@ -386,7 +386,7 @@ async function runExtensionsBuild() {
         }
       }
 
-      registry.datasources.push({
+      const registryEntry = {
         id: ds.id,
         name: ds.name,
         description: ds.description,
@@ -398,7 +398,10 @@ async function runExtensionsBuild() {
         drivers: driverDescriptors,
         docsUrl: ds.docsUrl ?? null,
         supportsPreview: ds.supportsPreview === true,
-      });
+      };
+      if (ds.previewUrlKind) registryEntry.previewUrlKind = ds.previewUrlKind;
+      if (ds.previewDataFormat) registryEntry.previewDataFormat = ds.previewDataFormat;
+      registry.datasources.push(registryEntry);
 
       // Check for src/schema.ts and bundle it if it exists
       const schemaSourcePath = path.resolve(pkgDir, 'src', 'schema.ts');

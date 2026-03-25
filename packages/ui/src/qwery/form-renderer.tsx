@@ -35,6 +35,7 @@ import { Textarea } from '@qwery/ui/textarea';
 
 import {
   extractDefaultsFromSchema,
+  getCommaSeparatedArrayInputMaxLength,
   getDefaultValue,
   getEnumValues,
   getFieldMeta,
@@ -45,6 +46,7 @@ import {
   humanizeFieldKey,
   unwrapSchema,
 } from './schema-form-utils';
+import { useMemo } from 'react';
 
 type ZodSchemaType = z.ZodTypeAny;
 
@@ -129,10 +131,17 @@ export function FormRenderer<T extends z.ZodTypeAny>({
       currentRootSchema as Parameters<typeof zodResolver>[0],
     ),
     defaultValues: mergedDefaults as Record<string, unknown>,
+    mode: 'onTouched',
+    reValidateMode: 'onChange',
   });
 
   // form.watch() required for onFormReady; incompatible with React Compiler memoization
   const watchedValues = form.watch(); // eslint-disable-line react-hooks/incompatible-library
+
+  const schemaValid = useMemo(
+    () => currentRootSchema.safeParse(watchedValues).success,
+    [currentRootSchema, watchedValues],
+  );
 
   const lastSerializedRef = React.useRef<string | null>(null);
   React.useEffect(() => {
@@ -144,15 +153,13 @@ export function FormRenderer<T extends z.ZodTypeAny>({
   }, [onFormReady, watchedValues]);
 
   React.useEffect(() => {
-    if (onValidityChange) {
-      const isValid = form.formState.isValid;
-      onValidityChange(isValid);
-    }
-  }, [onValidityChange, form.formState.isValid]);
+    if (!onValidityChange) return;
+    onValidityChange(schemaValid);
+  }, [onValidityChange, schemaValid]);
 
   React.useEffect(() => {
-    if (isUnion && root.unionOptions[unionVariant]) {
-      const nextSchema = root.unionOptions[unionVariant];
+    const nextSchema = isUnion ? root.unionOptions[unionVariant] : undefined;
+    if (nextSchema) {
       const nextDefaults = extractDefaultsFromSchema(nextSchema);
       form.reset(nextDefaults as Record<string, unknown>);
     }
@@ -210,6 +217,13 @@ export function FormRenderer<T extends z.ZodTypeAny>({
               ? 'url'
               : 'text';
         const isLongText = (checks.max ?? 0) > 200;
+        const isConnectionStringField =
+          path === 'connectionUrl' ||
+          path === 'connectionString' ||
+          path.endsWith('.connectionUrl') ||
+          path.endsWith('.connectionString');
+        const useTextarea = isLongText || isConnectionStringField;
+        const maxLength = checks.max;
         return (
           <FormField
             key={path}
@@ -228,11 +242,13 @@ export function FormRenderer<T extends z.ZodTypeAny>({
                 <FormItem>
                   <FormLabel>{label}</FormLabel>
                   <FormControl>
-                    {isLongText ? (
+                    {useTextarea ? (
                       <Textarea
                         {...field}
                         placeholder={displayPlaceholder}
+                        {...(maxLength != null ? { maxLength } : {})}
                         rows={4}
+                        className="min-h-[140px] resize-none font-mono text-sm"
                       />
                     ) : isSecret && isProtected ? (
                       <div className="relative flex items-center gap-2">
@@ -256,6 +272,7 @@ export function FormRenderer<T extends z.ZodTypeAny>({
                       <SecretInput
                         {...field}
                         placeholder={displayPlaceholder}
+                        {...(maxLength != null ? { maxLength } : {})}
                         value={field.value ?? ''}
                       />
                     ) : (
@@ -263,6 +280,7 @@ export function FormRenderer<T extends z.ZodTypeAny>({
                         {...field}
                         type={inputType}
                         placeholder={displayPlaceholder}
+                        {...(maxLength != null ? { maxLength } : {})}
                         value={field.value ?? ''}
                       />
                     )}
@@ -391,6 +409,7 @@ export function FormRenderer<T extends z.ZodTypeAny>({
       }
 
       if (typeName === 'ZodArray') {
+        const commaMaxLen = getCommaSeparatedArrayInputMaxLength(fieldSchema);
         return (
           <FormField
             key={path}
@@ -410,6 +429,7 @@ export function FormRenderer<T extends z.ZodTypeAny>({
                         ? field.value.join(', ')
                         : ((field.value as string) ?? '')
                     }
+                    {...(commaMaxLen != null ? { maxLength: commaMaxLen } : {})}
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                       const v = e.target.value;
                       field.onChange(

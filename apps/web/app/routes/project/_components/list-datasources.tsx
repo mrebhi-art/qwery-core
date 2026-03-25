@@ -168,7 +168,7 @@ export function ListDatasources({
       const matchesSearch =
         searchQuery === '' ||
         datasource.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        datasource.description
+        (datasource.description ?? '')
           .toLowerCase()
           .includes(searchQuery.toLowerCase());
       return matchesSearch;
@@ -207,7 +207,6 @@ export function ListDatasources({
     return groups;
   }, [filteredDatasources, groupByProvider]);
 
-  // Reset to page 1 when filtered results change
   const effectiveCurrentPage = useMemo(() => {
     const totalPages = Math.ceil(filteredDatasources.length / ITEMS_PER_PAGE);
     return currentPage > totalPages ? 1 : currentPage;

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   getDatasourcePreviewUrl,
@@ -12,36 +12,10 @@ import {
   usesParquetDataFormat,
   validateDatasourceUrl,
 } from '~/lib/utils/datasource-utils';
-
-const gsheetHostRegex = /^(?:[a-z0-9-]+\.)?docs\.google\.com$/i;
-const gsheetPathRegex = /^\/spreadsheets\/d\//;
-
-vi.mock('~/lib/utils/google-sheets-preview', () => ({
-  parseGoogleSheetsUrl: vi.fn((url: string) => {
-    try {
-      const u = new URL(url.startsWith('http') ? url : `https://${url}`);
-      if (
-        !gsheetHostRegex.test(u.hostname) ||
-        !gsheetPathRegex.test(u.pathname)
-      )
-        return null;
-      return u.pathname.startsWith('/spreadsheets/d/e/')
-        ? { sheetId: 'pub123', gid: '0', isPublishedUrl: true }
-        : { sheetId: 'abc123', gid: '0', isPublishedUrl: false };
-    } catch {
-      return null;
-    }
-  }),
-  convertGoogleSheetsToEmbedUrl: vi.fn((url: string) => {
-    try {
-      const u = new URL(url.startsWith('http') ? url : `https://${url}`);
-      if (!gsheetHostRegex.test(u.hostname)) return null;
-      return `https://docs.google.com/spreadsheets/d/abc123/pubhtml?widget=true&headers=false&gid=0`;
-    } catch {
-      return null;
-    }
-  }),
-}));
+import {
+  expandStoredConfigForFormDefaults,
+  getConnectionValueKey,
+} from '~/lib/utils/datasource-connection-fields-utils';
 
 describe('isGsheetLikeUrl', () => {
   it('returns true for valid Google Sheets URLs', () => {
@@ -241,6 +215,46 @@ describe('validateDatasourceUrl', () => {
       error: null,
     });
   });
+
+  it('rejects mismatched file extension for data-file kinds when previewDataFormat is set', () => {
+    const jsonMeta = {
+      id: 'json-online',
+      supportsPreview: true,
+      previewUrlKind: 'data-file' as const,
+      previewDataFormat: 'json' as const,
+    };
+    const csvMeta = {
+      id: 'csv-online',
+      supportsPreview: true,
+      previewUrlKind: 'data-file' as const,
+      previewDataFormat: 'csv' as const,
+    };
+    const parquetMeta = {
+      id: 'parquet-online',
+      supportsPreview: true,
+      previewUrlKind: 'data-file' as const,
+      previewDataFormat: 'parquet' as const,
+    };
+
+    expect(
+      validateDatasourceUrl(jsonMeta, 'https://example.com/file.csv'),
+    ).toEqual({
+      isValid: false,
+      error: 'This datasource expects a .json file URL.',
+    });
+    expect(
+      validateDatasourceUrl(csvMeta, 'https://example.com/file.json'),
+    ).toEqual({
+      isValid: false,
+      error: 'This datasource expects a .csv file URL.',
+    });
+    expect(
+      validateDatasourceUrl(parquetMeta, 'https://example.com/file.csv'),
+    ).toEqual({
+      isValid: false,
+      error: 'This datasource expects a .parquet file URL.',
+    });
+  });
 });
 
 describe('getUrlForValidation', () => {
@@ -292,7 +306,7 @@ describe('getDatasourcePreviewUrl', () => {
     ).toBe(null);
   });
 
-  it('returns embed URL for embeddable + valid Google Sheets link', () => {
+  it('returns raw URL for embeddable + Google Sheets link', () => {
     const meta = {
       id: 'gsheet-csv',
       supportsPreview: true,
@@ -300,12 +314,14 @@ describe('getDatasourcePreviewUrl', () => {
     };
     const url = getDatasourcePreviewUrl(
       {
-        sharedLink: 'https://docs.google.com/spreadsheets/d/1abc/edit#gid=0',
+        sharedLink:
+          'https://docs.google.com/spreadsheets/d/1abc12345678901234567890/edit#gid=0',
       },
       meta,
     );
     expect(url).toContain('docs.google.com');
-    expect(url).toContain('pubhtml');
+    expect(url).toContain('/spreadsheets/d/');
+    expect(url).toContain('/edit');
   });
 
   it('returns raw URL for data-file kind', () => {
@@ -317,5 +333,88 @@ describe('getDatasourcePreviewUrl', () => {
     expect(
       getDatasourcePreviewUrl({ url: 'https://example.com/file.csv' }, meta),
     ).toBe('https://example.com/file.csv');
+  });
+});
+
+describe('getConnectionValueKey', () => {
+  it('uses jsonUrl for json-online (matches saved normalizeProviderConfig)', () => {
+    expect(getConnectionValueKey('fileUrl', undefined, 'json-online')).toBe(
+      'jsonUrl',
+    );
+  });
+
+  it('defaults to url for csv/parquet fileUrl', () => {
+    expect(getConnectionValueKey('fileUrl', undefined, 'csv-online')).toBe(
+      'url',
+    );
+    expect(getConnectionValueKey('fileUrl', undefined, 'parquet-online')).toBe(
+      'url',
+    );
+  });
+
+  it('uses database for embeddable DuckDB / PGlite (matches saved normalize)', () => {
+    expect(getConnectionValueKey('connectionString', undefined, 'duckdb')).toBe(
+      'database',
+    );
+    expect(
+      getConnectionValueKey('connectionString', undefined, 'duckdb-wasm'),
+    ).toBe('database');
+    expect(getConnectionValueKey('connectionString', undefined, 'pglite')).toBe(
+      'database',
+    );
+  });
+});
+
+describe('expandStoredConfigForFormDefaults', () => {
+  it('maps connectionString into connectionUrl for SQL datasources', () => {
+    const out = expandStoredConfigForFormDefaults('postgresql', {
+      connectionString: 'postgresql://u:p@h:5432/db',
+    });
+    expect(out.connectionUrl).toBe('postgresql://u:p@h:5432/db');
+  });
+
+  it('maps jsonUrl for json-online and fills url aliases', () => {
+    expect(
+      expandStoredConfigForFormDefaults('json-online', {
+        jsonUrl: 'https://example.com/a.json',
+      }).jsonUrl,
+    ).toBe('https://example.com/a.json');
+    expect(
+      expandStoredConfigForFormDefaults('json-online', {
+        url: 'https://example.com/a.json',
+      }).jsonUrl,
+    ).toBe('https://example.com/a.json');
+  });
+
+  it('maps database path for DuckDB when only legacy keys exist', () => {
+    const out = expandStoredConfigForFormDefaults('duckdb', {
+      connectionUrl: ':memory:',
+    });
+    expect(out.database).toBe(':memory:');
+  });
+
+  it('fills sharedLink for gsheet-csv from url/connectionUrl', () => {
+    expect(
+      expandStoredConfigForFormDefaults('gsheet-csv', {
+        url: 'https://docs.google.com/spreadsheets/d/abc/edit#gid=0',
+      }).sharedLink,
+    ).toBe('https://docs.google.com/spreadsheets/d/abc/edit#gid=0');
+  });
+
+  it('cleans invalid gsheet sharedLink and recovers from url', () => {
+    expect(
+      expandStoredConfigForFormDefaults('gsheet-csv', {
+        sharedLink: 'postgresql://u:p@h:5432/db',
+        url: 'https://docs.google.com/spreadsheets/d/abc/edit#gid=0',
+      }).sharedLink,
+    ).toBe('https://docs.google.com/spreadsheets/d/abc/edit#gid=0');
+  });
+
+  it('fills url/jsonUrl for non-legacy schema forms', () => {
+    const out = expandStoredConfigForFormDefaults('some-new-extension', {
+      jsonUrl: 'https://x.com/f.json',
+    });
+    expect(out.url).toBe('https://x.com/f.json');
+    expect(out.jsonUrl).toBe('https://x.com/f.json');
   });
 });

@@ -16,6 +16,7 @@
   "exports": {
     "./logger": "./src/logger/index.ts",
     "./model-cost": "./src/model-cost/index.ts",
+    "./github": "./src/github.ts",
     "./utils": "./src/utils.ts",
     "./workspace": "./src/workspace.ts",
     "./hooks": "./src/hooks/index.ts",
@@ -25,7 +26,9 @@
     "./message-constants": "./src/message-constants.ts",
     "./message-role-utils": "./src/utils/message-role.ts",
     "./error": "./src/error/index.ts",
-    "./export": "./src/export.ts"
+    "./export": "./src/export.ts",
+    "./csv-validate": "./src/csv-validate.ts",
+    "./sql-string-literal": "./src/sql-string-literal.ts"
   },
   "devDependencies": {
     "@qwery/eslint-config": "workspace:*",

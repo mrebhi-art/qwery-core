@@ -1,11 +1,14 @@
-'use client';
-
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { z } from 'zod';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { z as zLib } from 'zod';
-import { Loader2, Pencil, Shuffle, Check } from 'lucide-react';
+import { Check, Loader2, Pencil, Shuffle, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Datasource, DatasourceKind } from '@qwery/domain/entities';
 import { GetProjectBySlugService } from '@qwery/domain/services';
@@ -39,15 +42,105 @@ import { FormRenderer } from '@qwery/ui/form-renderer';
 import {
   getUrlForValidation,
   validateDatasourceUrl,
+  isGsheetLikeUrl,
 } from '~/lib/utils/datasource-utils';
-import { resolveDatasourceDriver } from '~/lib/utils/datasource-driver';
-import { DatasourceDocsLink } from './datasource-docs-link';
 import {
-  ERROR_KEYS,
-  getErrorKey,
-  getFirstZodValidationMessage,
-} from '~/lib/utils/error-key';
+  hasLegacyFormRule,
+  getDocsUrl,
+  DATASOURCE_INPUT_MAX_LENGTH,
+} from '~/lib/utils/datasource-form-config';
+import { getLogger } from '@qwery/shared/logger';
+import { useDatasourceAddedFlash } from '~/lib/context/datasource-added-flash-context';
+import { resolveDriverOrThrow } from '~/lib/utils/datasource-driver';
+import { DatasourceDocsLink } from './datasource-docs-link';
+import { DatasourceConnectionFields } from './datasource-connection-fields';
+import { DatasourceS3Fields } from './datasource-s3-fields';
+import { expandStoredConfigForFormDefaults } from '~/lib/utils/datasource-connection-fields-utils';
+import { ERROR_KEYS, getErrorKey } from '~/lib/utils/error-key';
 import { shouldInvertDatasourceIcon } from '@qwery/shared/utils';
+import { ZodErrorVisualizer } from '@qwery/ui/qwery/datasource';
+import { ZodError } from 'zod';
+import { validateDatasourceConfigPipeline } from '~/lib/utils/datasource-config-pipeline';
+
+interface DatasourceFormActionsProps {
+  onCancel: () => void;
+  onTestConnection: () => void;
+  onSubmit: () => void;
+  isActionDisabled: boolean;
+  isTestConnectionDisabled: boolean;
+  isSubmitDisabled: boolean;
+  isPending: boolean;
+  isConnecting: boolean;
+  existingDatasource: Datasource | undefined;
+  onDeleteClick: () => void;
+}
+
+const DatasourceFormActions = React.memo(function DatasourceFormActions({
+  onCancel,
+  onTestConnection,
+  onSubmit,
+  isActionDisabled,
+  isTestConnectionDisabled,
+  isSubmitDisabled,
+  isPending,
+  isConnecting,
+  existingDatasource,
+  onDeleteClick,
+}: DatasourceFormActionsProps) {
+  return (
+    <div className="flex flex-col-reverse gap-3 pt-8 sm:flex-row sm:items-center sm:justify-between">
+      <Button
+        variant="ghost"
+        onClick={onCancel}
+        disabled={isActionDisabled}
+        className="text-muted-foreground hover:text-foreground hover:bg-transparent"
+      >
+        <Trans i18nKey="datasources:cancel" />
+      </Button>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        {existingDatasource && (
+          <Button
+            variant="destructive"
+            onClick={onDeleteClick}
+            disabled={isActionDisabled}
+            data-test="datasource-delete-button"
+          >
+            <Trans i18nKey="datasources:deleteButton" />
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          onClick={onTestConnection}
+          disabled={isTestConnectionDisabled}
+          className="border-border border bg-white font-semibold text-black shadow-sm transition-all hover:bg-gray-50 hover:text-black"
+        >
+          {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+          <Trans i18nKey="datasources:testConnection" />
+        </Button>
+        <Button
+          onClick={onSubmit}
+          disabled={isSubmitDisabled}
+          className="border-0 bg-yellow-400 font-bold text-black shadow-lg transition-all hover:bg-yellow-500"
+        >
+          {isConnecting ? (
+            <Loader2 className="mr-2 size-4 animate-spin" />
+          ) : (
+            <Check className="mr-2 size-4" />
+          )}
+          {existingDatasource ? (
+            isConnecting ? (
+              <Trans i18nKey="datasources:updating" />
+            ) : (
+              <Trans i18nKey="datasources:update" />
+            )
+          ) : (
+            <Trans i18nKey="datasources:connect" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+});
 
 export interface DatasourceConnectFormProps {
   extensionId: string;
@@ -67,6 +160,8 @@ export interface DatasourceConnectFormProps {
   onFormValidityChange?: (valid: boolean) => void;
   onTestConnectionLoadingChange?: (isLoading: boolean) => void;
   existingDatasource?: Datasource;
+  onSwitchToGsheet?: (sharedLink: string) => void;
+  initialFormValues?: Record<string, unknown>;
 }
 
 export function DatasourceConnectForm({
@@ -87,12 +182,15 @@ export function DatasourceConnectForm({
   onFormValidityChange,
   onTestConnectionLoadingChange,
   existingDatasource,
+  onSwitchToGsheet,
+  initialFormValues,
 }: DatasourceConnectFormProps) {
   const [internalName, setInternalName] = useState(
     () => existingDatasource?.name ?? generateRandomName(),
   );
   const [isEditingName, setIsEditingName] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const nameSnapshotRef = useRef(internalName);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, unknown> | null>(
@@ -100,24 +198,59 @@ export function DatasourceConnectForm({
   );
   const [schemaValid, setSchemaValid] = useState(false);
   const [portalTarget, setPortalTarget] = useState<HTMLDivElement | null>(null);
+  const [validationError, setValidationError] = useState<ZodError | null>(null);
+  const lastValidatedRef = useRef<{
+    valuesKey: string;
+    config: Record<string, unknown>;
+  } | null>(null);
 
   const urlValidation = useMemo(() => {
-    if (
-      !extensionMeta?.supportsPreview ||
-      (extensionMeta?.previewUrlKind !== 'embeddable' &&
-        extensionMeta?.previewUrlKind !== 'data-file')
-    ) {
-      return { valid: true, error: null as string | null };
+    if (!extensionMeta?.supportsPreview) {
+      return {
+        valid: true,
+        error: null as string | null,
+        gsheetHintUrl: null as string | null,
+      };
     }
+
     const url = getUrlForValidation(formValues, extensionMeta);
+
+    // Special case: CSV Online with a Google Sheets link -> soft hint, not a hard error
+    if (extensionId === 'csv-online' && url && isGsheetLikeUrl(url)) {
+      return {
+        valid: true,
+        error: null,
+        gsheetHintUrl: url,
+      };
+    }
+
+    if (
+      extensionMeta.previewUrlKind !== 'embeddable' &&
+      extensionMeta.previewUrlKind !== 'data-file'
+    ) {
+      return {
+        valid: true,
+        error: null as string | null,
+        gsheetHintUrl: null as string | null,
+      };
+    }
+
     const result = validateDatasourceUrl(extensionMeta, url);
-    return { valid: result.isValid, error: result.error };
-  }, [formValues, extensionMeta]);
+    return {
+      valid: result.isValid,
+      error: result.error,
+      gsheetHintUrl: null as string | null,
+    };
+  }, [formValues, extensionMeta, extensionId]);
 
   const isFormValid = schemaValid && urlValidation.valid;
 
+  const lastFormValidRef = useRef<boolean | null>(null);
   useEffect(() => {
-    onFormValidityChange?.(isFormValid);
+    if (!onFormValidityChange) return;
+    if (lastFormValidRef.current === isFormValid) return;
+    lastFormValidRef.current = isFormValid;
+    onFormValidityChange(isFormValid);
   }, [isFormValid, onFormValidityChange]);
 
   useEffect(() => {
@@ -138,8 +271,10 @@ export function DatasourceConnectForm({
   const projectRepository = repositories.project;
   const extension = useGetExtension(extensionId);
   const extensionSchema = useExtensionSchema(extensionId);
+  const usePresetForm = hasLegacyFormRule(extensionId);
+  const docsUrl = extension.data?.docsUrl ?? getDocsUrl(extensionId, undefined);
 
-  /** Fallback when extension has no schema (e.g. 404 on schema.js). FormRenderer always used. */
+  /** Fallback when extension has no schema (e.g. 404 on schema.js). FormRenderer only when !usePresetForm. */
   const fallbackSchema = useMemo(
     () =>
       zLib
@@ -151,6 +286,17 @@ export function DatasourceConnectForm({
     [],
   );
   const effectiveSchema = extensionSchema.data ?? fallbackSchema;
+
+  const editFormDefaults = useMemo(
+    () =>
+      expandStoredConfigForFormDefaults(
+        extensionId,
+        (existingDatasource?.config as Record<string, unknown> | undefined) ??
+          initialFormValues,
+        undefined,
+      ),
+    [extensionId, existingDatasource?.config, initialFormValues],
+  );
 
   const testConnectionMutation = useTestConnection(
     (result) => {
@@ -192,30 +338,37 @@ export function DatasourceConnectForm({
         handleNameSave();
       }
       if (e.key === 'Escape') {
+        e.preventDefault();
+        setDatasourceName(nameSnapshotRef.current);
         setIsEditingName(false);
       }
     },
-    [handleNameSave],
+    [handleNameSave, setDatasourceName],
   );
 
   const handleFormReady = useCallback(
     (values: Record<string, unknown>) => {
       setFormValues(values);
       onFormValuesChange?.(values);
+      lastValidatedRef.current = null;
     },
     [onFormValuesChange],
   );
 
+  const { triggerDatasourceBadge } = useDatasourceAddedFlash() ?? {};
   const createDatasourceMutation = useCreateDatasource(
     datasourceRepository,
     (_datasource) => {
       toast.success(<Trans i18nKey="datasources:saveSuccess" />);
+      triggerDatasourceBadge?.();
       setIsConnecting(false);
       onSuccess();
     },
     (error) => {
       toast.error(getErrorKey(error, t));
-      console.error(error);
+      void getLogger().then((logger) =>
+        logger.error('Create datasource failed', { error }),
+      );
       setIsConnecting(false);
     },
   );
@@ -229,7 +382,9 @@ export function DatasourceConnectForm({
     },
     (error) => {
       toast.error(getErrorKey(error, t));
-      console.error(error);
+      void getLogger().then((logger) =>
+        logger.error('Update datasource failed', { error }),
+      );
       setIsConnecting(false);
     },
   );
@@ -243,33 +398,54 @@ export function DatasourceConnectForm({
     },
     (error) => {
       toast.error(getErrorKey(error, t));
-      console.error(error);
+      void getLogger().then((logger) =>
+        logger.error('Delete datasource failed', { error }),
+      );
     },
   );
 
-  const handleTestConnection = useCallback(() => {
+  const handleTestConnection = useCallback(async () => {
     if (!extension?.data) return;
     if (!formValues) {
       toast.error(<Trans i18nKey="datasources:formNotReady" />);
       return;
     }
-    const parsed = (effectiveSchema as z.ZodTypeAny).safeParse(formValues);
-    if (!parsed.success) {
-      const msg =
-        getFirstZodValidationMessage(parsed.error) || 'Invalid configuration';
-      toast.error(msg);
+
+    const result = await validateDatasourceConfigPipeline({
+      values: formValues,
+      extensionId,
+      schema: effectiveSchema,
+      extensionMeta: extension.data,
+    });
+    if (!result.success) {
+      setValidationError(result.zodError ?? null);
+      toast.error(result.error);
       return;
     }
-    const validData = parsed.data as Record<string, unknown>;
+    setValidationError(null);
+    const validData = result.config;
+    lastValidatedRef.current = {
+      valuesKey: JSON.stringify(formValues),
+      config: validData,
+    };
+
     const dsMeta = extension.data as DatasourceExtension | undefined;
     if (!dsMeta) {
       toast.error(<Trans i18nKey="datasources:notFoundError" />);
       return;
     }
 
-    const driver = resolveDatasourceDriver(dsMeta, { config: validData });
-    if (!driver) {
-      toast.error(<Trans i18nKey="datasources:notFoundError" />);
+    let driver;
+    try {
+      driver = resolveDriverOrThrow(dsMeta, { config: validData });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? (
+          err.message
+        ) : (
+          <Trans i18nKey="datasources:notFoundError" />
+        ),
+      );
       return;
     }
 
@@ -294,6 +470,7 @@ export function DatasourceConnectForm({
     datasourceName,
     testConnectionMutation,
     onTestConnectionLoadingChange,
+    extensionId,
   ]);
 
   const handleConnect = useCallback(async () => {
@@ -329,33 +506,67 @@ export function DatasourceConnectForm({
       return;
     }
 
-    const parsed = (effectiveSchema as z.ZodTypeAny).safeParse(formValues);
-    if (!parsed.success) {
-      const msg =
-        getFirstZodValidationMessage(parsed.error) || 'Invalid configuration';
-      toast.error(msg);
-      setIsConnecting(false);
-      return;
+    const valuesKey = JSON.stringify(formValues);
+    const cached =
+      lastValidatedRef.current?.valuesKey === valuesKey
+        ? lastValidatedRef.current.config
+        : null;
+
+    let validData: Record<string, unknown>;
+    if (cached) {
+      validData = cached;
+    } else {
+      const result = await validateDatasourceConfigPipeline({
+        values: formValues,
+        extensionId,
+        schema: effectiveSchema,
+        extensionMeta: extension.data,
+      });
+      if (!result.success) {
+        setValidationError(result.zodError ?? null);
+        toast.error(result.error);
+        setIsConnecting(false);
+        return;
+      }
+      setValidationError(null);
+      validData = result.config;
+      lastValidatedRef.current = { valuesKey, config: validData };
     }
-    const validData = parsed.data as Record<string, unknown>;
 
     const dsMeta = extension.data as DatasourceExtension | undefined;
     if (!dsMeta) {
       toast.error(<Trans i18nKey="datasources:notFoundError" />);
+      setIsConnecting(false);
       return;
     }
-    const driver = resolveDatasourceDriver(dsMeta, { config: validData });
-    const runtime = driver?.runtime ?? 'browser';
+
+    let driver;
+    try {
+      driver = resolveDriverOrThrow(dsMeta, { config: validData });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? (
+          err.message
+        ) : (
+          <Trans i18nKey="datasources:notFoundError" />
+        ),
+      );
+      setIsConnecting(false);
+      return;
+    }
+
     const datasourceKind =
-      runtime === 'browser' ? DatasourceKind.EMBEDDED : DatasourceKind.REMOTE;
+      driver.runtime === 'browser'
+        ? DatasourceKind.EMBEDDED
+        : DatasourceKind.REMOTE;
 
     createDatasourceMutation.mutate({
       projectId,
       name: datasourceName.trim() || generateRandomName(),
       description: extension.data.description || '',
       datasource_provider: extension.data.id || '',
-      datasource_driver: driver?.id || '',
-      datasource_kind: datasourceKind as string,
+      datasource_driver: driver.id,
+      datasource_kind: datasourceKind,
       config: validData,
       createdBy: workspace.userId,
     });
@@ -370,6 +581,7 @@ export function DatasourceConnectForm({
     workspace.userId,
     projectRepository,
     createDatasourceMutation,
+    extensionId,
   ]);
 
   const handleUpdate = useCallback(async () => {
@@ -383,23 +595,58 @@ export function DatasourceConnectForm({
       return;
     }
     setIsConnecting(true);
-    const parsed = (effectiveSchema as z.ZodTypeAny).safeParse(formValues);
-    if (!parsed.success) {
-      const msg = parsed.error.issues[0]?.message ?? 'Invalid configuration';
-      toast.error(msg);
+
+    const valuesKey = JSON.stringify(formValues);
+    const cached =
+      lastValidatedRef.current?.valuesKey === valuesKey
+        ? lastValidatedRef.current.config
+        : null;
+
+    let validData: Record<string, unknown>;
+    if (cached) {
+      validData = cached;
+    } else {
+      const result = await validateDatasourceConfigPipeline({
+        values: formValues,
+        extensionId,
+        schema: effectiveSchema,
+        extensionMeta: extension.data,
+      });
+      if (!result.success) {
+        setValidationError(result.zodError ?? null);
+        toast.error(result.error);
+        setIsConnecting(false);
+        return;
+      }
+      setValidationError(null);
+      validData = result.config;
+      lastValidatedRef.current = { valuesKey, config: validData };
+    }
+
+    let driver;
+    try {
+      driver = resolveDriverOrThrow(dsMeta, { config: validData });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? (
+          err.message
+        ) : (
+          <Trans i18nKey="datasources:notFoundError" />
+        ),
+      );
       setIsConnecting(false);
       return;
     }
-    const validData = parsed.data as Record<string, unknown>;
-    const driver = resolveDatasourceDriver(dsMeta, { config: validData });
-    const runtime = driver?.runtime ?? 'browser';
+
     const datasourceKind =
-      runtime === 'browser' ? DatasourceKind.EMBEDDED : DatasourceKind.REMOTE;
+      driver.runtime === 'browser'
+        ? DatasourceKind.EMBEDDED
+        : DatasourceKind.REMOTE;
 
     updateDatasourceMutation.mutate({
       id: existingDatasource.id,
       name: datasourceName.trim() || existingDatasource.name,
-      datasource_driver: driver?.id,
+      datasource_driver: driver.id,
       datasource_kind: datasourceKind,
       config: validData,
       updatedBy: workspace.userId ?? 'system',
@@ -412,6 +659,7 @@ export function DatasourceConnectForm({
     datasourceName,
     workspace.userId,
     updateDatasourceMutation,
+    extensionId,
   ]);
 
   const handleConfirmDelete = useCallback(() => {
@@ -432,63 +680,26 @@ export function DatasourceConnectForm({
     updateDatasourceMutation.isPending ||
     deleteDatasourceMutation.isPending;
   const isActionDisabled = isConnecting || isPending;
-  const isTestConnectionDisabled = isActionDisabled || !isFormValid;
+  const isTestConnectionDisabled = isActionDisabled;
+  // Edit flow: allow save while a test is in flight (user may skip re-test after edits).
   const isSubmitDisabled =
-    isActionDisabled ||
-    !isFormValid ||
-    (existingDatasource ? false : isTestConnectionLoading);
+    isActionDisabled || (existingDatasource ? false : isTestConnectionLoading);
+
+  const handleDeleteClick = useCallback(() => setIsDeleteDialogOpen(true), []);
+
   const actionsEl = (
-    <div className="flex flex-col-reverse gap-3 pt-8 sm:flex-row sm:items-center sm:justify-between">
-      <Button
-        variant="ghost"
-        onClick={onCancel}
-        disabled={isActionDisabled}
-        className="text-muted-foreground hover:text-foreground hover:bg-transparent"
-      >
-        <Trans i18nKey="datasources:cancel" />
-      </Button>
-      <div className="flex flex-col gap-3 sm:flex-row">
-        {existingDatasource && (
-          <Button
-            variant="destructive"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isActionDisabled}
-            data-test="datasource-delete-button"
-          >
-            <Trans i18nKey="datasources:deleteButton" />
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          onClick={handleTestConnection}
-          disabled={isTestConnectionDisabled}
-          className="border-border border bg-white font-semibold text-black shadow-sm transition-all hover:bg-gray-50 hover:text-black"
-        >
-          {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-          <Trans i18nKey="datasources:testConnection" />
-        </Button>
-        <Button
-          onClick={existingDatasource ? handleUpdate : handleConnect}
-          disabled={isSubmitDisabled}
-          className="border-0 bg-yellow-400 font-bold text-black shadow-lg transition-all hover:bg-yellow-500"
-        >
-          {isConnecting ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : (
-            <Check className="mr-2 size-4" />
-          )}
-          {existingDatasource ? (
-            isConnecting ? (
-              <Trans i18nKey="datasources:updating" />
-            ) : (
-              <Trans i18nKey="datasources:update" />
-            )
-          ) : (
-            <Trans i18nKey="datasources:connect" />
-          )}
-        </Button>
-      </div>
-    </div>
+    <DatasourceFormActions
+      onCancel={onCancel}
+      onTestConnection={handleTestConnection}
+      onSubmit={existingDatasource ? handleUpdate : handleConnect}
+      isActionDisabled={isActionDisabled}
+      isTestConnectionDisabled={isTestConnectionDisabled}
+      isSubmitDisabled={isSubmitDisabled}
+      isPending={isPending}
+      isConnecting={isConnecting}
+      existingDatasource={existingDatasource}
+      onDeleteClick={handleDeleteClick}
+    />
   );
 
   return (
@@ -518,7 +729,7 @@ export function DatasourceConnectForm({
               <span className="text-2xl font-semibold tracking-tight">
                 Connect to {extensionMeta.name}
               </span>
-              <DatasourceDocsLink docsUrl={extension.data?.docsUrl} />
+              <DatasourceDocsLink docsUrl={docsUrl} />
             </div>
           </div>
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -533,8 +744,8 @@ export function DatasourceConnectForm({
                     autoFocus
                     value={datasourceName}
                     onChange={(e) => setDatasourceName(e.target.value)}
-                    onBlur={handleNameSave}
                     onKeyDown={handleNameKeyDown}
+                    maxLength={DATASOURCE_INPUT_MAX_LENGTH.name}
                     autoComplete="off"
                     className="bg-muted/40 focus-visible:ring-ring h-8 min-w-[120px] flex-1 rounded-md border-0 px-2 text-base font-medium shadow-none focus-visible:ring-2"
                     placeholder="Name..."
@@ -544,6 +755,7 @@ export function DatasourceConnectForm({
                     variant="ghost"
                     className="h-8 w-8 shrink-0"
                     onClick={handleNameSave}
+                    aria-label="Save name"
                   >
                     <Check className="h-5 w-5" />
                   </Button>
@@ -555,6 +767,19 @@ export function DatasourceConnectForm({
                     title="Randomize name"
                   >
                     <Shuffle className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => {
+                      setDatasourceName(nameSnapshotRef.current);
+                      setIsEditingName(false);
+                    }}
+                    aria-label="Discard name changes"
+                  >
+                    <X className="h-4 w-4" />
                   </Button>
                 </>
               ) : (
@@ -575,7 +800,10 @@ export function DatasourceConnectForm({
                     variant="ghost"
                     size="icon"
                     className="text-muted-foreground hover:text-foreground h-8 w-8 shrink-0"
-                    onClick={() => setIsEditingName(true)}
+                    onClick={() => {
+                      nameSnapshotRef.current = datasourceName;
+                      setIsEditingName(true);
+                    }}
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
@@ -601,30 +829,71 @@ export function DatasourceConnectForm({
             </div>
           ) : (
             <div className="space-y-6">
-              <FormRenderer
-                schema={effectiveSchema}
-                onSubmit={() => {}}
-                formId={formId ?? 'datasource-form'}
-                locale={i18n.resolvedLanguage}
-                onFormReady={(values) =>
-                  handleFormReady(values as Record<string, unknown>)
-                }
-                onValidityChange={setSchemaValid}
-                defaultValues={
-                  existingDatasource?.config as
-                    | Record<string, unknown>
-                    | undefined
-                }
-              />
-              {urlValidation.error ? (
+              {extensionId === 's3' ? (
+                <DatasourceS3Fields
+                  key={existingDatasource?.id ?? 'new'}
+                  formId={formId ?? 'datasource-form'}
+                  onFormReady={handleFormReady}
+                  onValidityChange={setSchemaValid}
+                  defaultValues={editFormDefaults}
+                />
+              ) : usePresetForm ? (
+                <DatasourceConnectionFields
+                  key={existingDatasource?.id ?? `new-${extensionId}`}
+                  extensionId={extensionId}
+                  formConfig={undefined}
+                  onFormReady={handleFormReady}
+                  onValidityChange={setSchemaValid}
+                  _formId={formId ?? 'datasource-form'}
+                  defaultValues={editFormDefaults}
+                />
+              ) : (
+                <FormRenderer
+                  schema={effectiveSchema}
+                  onSubmit={() => {}}
+                  formId={formId ?? 'datasource-form'}
+                  locale={i18n.resolvedLanguage}
+                  onFormReady={(values) =>
+                    handleFormReady(values as Record<string, unknown>)
+                  }
+                  onValidityChange={setSchemaValid}
+                  defaultValues={editFormDefaults}
+                />
+              )}
+              {urlValidation.gsheetHintUrl && extensionId === 'csv-online' ? (
+                <div className="border-border/40 bg-muted/20 text-muted-foreground mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs">
+                  <span className="max-w-xs">
+                    This looks like a Google Sheets link. For the best
+                    experience, use the Google Sheets datasource instead.
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => {
+                      onSwitchToGsheet?.(String(urlValidation.gsheetHintUrl));
+                    }}
+                  >
+                    Switch to Google Sheets
+                  </Button>
+                </div>
+              ) : urlValidation.error ? (
                 <p
-                  className="text-destructive text-sm"
+                  className="border-destructive/30 bg-destructive/5 text-destructive dark:border-destructive/40 dark:bg-destructive/10 mt-1 flex gap-2 rounded-md border px-3 py-1.5 text-xs leading-snug font-medium dark:text-red-300"
                   role="alert"
                   data-test="datasource-url-validation-error"
                 >
                   {urlValidation.error}
                 </p>
               ) : null}
+              {validationError && (
+                <ZodErrorVisualizer
+                  error={validationError}
+                  className="mt-4"
+                  title="Check the following fields"
+                />
+              )}
             </div>
           )}
         </section>
@@ -642,7 +911,7 @@ export function DatasourceConnectForm({
               setIsDeleteDialogOpen(open);
           }}
         >
-          <AlertDialogContent className="z-[200]" overlayClassName="z-[200]">
+          <AlertDialogContent className="z-200" overlayClassName="z-200">
             <AlertDialogHeader>
               <AlertDialogTitle>
                 <Trans i18nKey="datasources:deleteConfirmTitle" />

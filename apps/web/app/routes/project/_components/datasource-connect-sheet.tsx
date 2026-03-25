@@ -1,10 +1,16 @@
-'use client';
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Datasource } from '@qwery/domain/entities';
+
+function stringifySorted(obj: Record<string, unknown>): string {
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(obj).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+  );
+}
 import type { DatasourcePreviewRef } from './datasource-preview';
 
-import { Pencil, Shuffle, X } from 'lucide-react';
+import { Check, Pencil, Shuffle, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@qwery/ui/sheet';
 import { Button } from '@qwery/ui/button';
 import { Input } from '@qwery/ui/input';
@@ -27,6 +33,7 @@ import { generateRandomName } from '~/lib/names';
 import { useGetExtension } from '~/lib/queries/use-get-extension';
 import type { ExtensionDefinition } from '@qwery/extensions-sdk';
 import { shouldInvertDatasourceIcon } from '@qwery/shared/utils';
+import { DATASOURCE_INPUT_MAX_LENGTH } from '~/lib/utils/datasource-form-config';
 
 const SHEET_OVERLAY_Z = 'z-[100]';
 const SHEET_CONTENT_Z = 'z-[101]';
@@ -40,6 +47,11 @@ export interface DatasourceConnectSheetProps {
   onSuccess: () => void;
   onCancel: () => void;
   existingDatasource?: Datasource;
+  initialFormValues?: Record<string, unknown>;
+  onSwitchToExtension?: (
+    extensionId: string,
+    initialValues: Record<string, unknown>,
+  ) => void;
   className?: string;
 }
 
@@ -52,6 +64,8 @@ export function DatasourceConnectSheet({
   onSuccess,
   onCancel,
   existingDatasource,
+  initialFormValues,
+  onSwitchToExtension,
   className,
 }: DatasourceConnectSheetProps) {
   const actionsRef = useRef<HTMLDivElement | null>(null);
@@ -72,7 +86,13 @@ export function DatasourceConnectSheet({
   const titleInputRef = useRef<HTMLInputElement>(null);
   const editingNameRef = useRef<string>('');
   const extension = useGetExtension(extensionId);
-  const extensionMetaForPreview = extension?.data ?? extensionMeta;
+  const extensionMetaForPreview = useMemo(
+    () => ({
+      ...extensionMeta,
+      ...(extension.data ?? {}),
+    }),
+    [extensionMeta, extension.data],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -104,6 +124,11 @@ export function DatasourceConnectSheet({
     setIsEditingName(false);
   }, []);
 
+  const beginEditingName = useCallback(() => {
+    editingNameRef.current = datasourceName;
+    setIsEditingName(true);
+  }, [datasourceName]);
+
   const handleNameKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
@@ -124,11 +149,10 @@ export function DatasourceConnectSheet({
     if (existingDatasource) {
       const nameChanged =
         datasourceName.trim() !== (existingDatasource.name ?? '').trim();
+      const a = formValues ?? null;
+      const b = existingDatasource.config ?? null;
       const configChanged =
-        formValues != null &&
-        existingDatasource.config != null &&
-        JSON.stringify(formValues) !==
-          JSON.stringify(existingDatasource.config);
+        a != null && b != null && stringifySorted(a) !== stringifySorted(b);
       return nameChanged || configChanged;
     }
     return (
@@ -223,12 +247,22 @@ export function DatasourceConnectSheet({
                         ref={titleInputRef}
                         value={datasourceName}
                         onChange={(e) => setDatasourceName(e.target.value)}
-                        onBlur={handleNameSave}
                         onKeyDown={handleNameKeyDown}
+                        maxLength={DATASOURCE_INPUT_MAX_LENGTH.name}
                         autoComplete="off"
                         className="min-w-[120px] flex-1 border-0 bg-transparent px-0 text-base font-medium shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                         placeholder="Name..."
                       />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 shrink-0"
+                        onClick={handleNameSave}
+                        aria-label="Save name"
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
                       {!existingDatasource && (
                         <Button
                           type="button"
@@ -247,7 +281,7 @@ export function DatasourceConnectSheet({
                         variant="ghost"
                         className="h-8 w-8 shrink-0"
                         onClick={handleNameCancel}
-                        aria-label="Discard changes"
+                        aria-label="Discard name changes"
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -280,10 +314,7 @@ export function DatasourceConnectSheet({
                           'h-8 w-8 shrink-0 transition-opacity',
                           isHoveringName ? 'opacity-100' : 'opacity-0',
                         )}
-                        onClick={() => {
-                          editingNameRef.current = datasourceName;
-                          setIsEditingName(true);
-                        }}
+                        onClick={beginEditingName}
                         aria-label="Edit name"
                       >
                         <Pencil className="h-4 w-4" />
@@ -298,7 +329,7 @@ export function DatasourceConnectSheet({
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
               <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-4">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div className="flex min-w-0 flex-col">
                   <DatasourceConnectForm
                     extensionId={extensionId}
                     projectSlug={projectSlug}
@@ -316,6 +347,13 @@ export function DatasourceConnectSheet({
                     onFormValidityChange={setIsFormValid}
                     onTestConnectionLoadingChange={setIsTestConnectionLoading}
                     existingDatasource={existingDatasource}
+                    initialFormValues={initialFormValues}
+                    onSwitchToGsheet={
+                      onSwitchToExtension
+                        ? (sharedLink) =>
+                            onSwitchToExtension('gsheet-csv', { sharedLink })
+                        : undefined
+                    }
                   />
                 </div>
                 {formValues &&
@@ -360,7 +398,7 @@ export function DatasourceConnectSheet({
               onClick={confirmExit}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Exit and Discard
+              Discard and Exit
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

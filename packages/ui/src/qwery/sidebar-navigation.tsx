@@ -54,6 +54,7 @@ function SidebarLabelText({
   title,
   className,
   hasUnsavedChanges,
+  badge,
 }: {
   label: string;
   suffix?: string;
@@ -61,6 +62,7 @@ function SidebarLabelText({
   title?: string;
   className?: string;
   hasUnsavedChanges?: boolean;
+  badge?: string;
 }) {
   const { t } = useTranslation();
   const translatedLabel = useMemo(
@@ -97,6 +99,14 @@ function SidebarLabelText({
           style={{ minWidth: '8px', minHeight: '8px' }}
         />
       )}
+      {badge ? (
+        <span
+          className="bg-primary text-primary-foreground animate-in fade-in-0 zoom-in-95 shrink-0 rounded px-1.5 py-0 text-[10px] font-semibold tabular-nums duration-300 ease-out"
+          aria-hidden
+        >
+          {badge}
+        </span>
+      ) : null}
       {suffix ? (
         <span className="text-muted-foreground shrink-0 text-xs font-normal whitespace-nowrap">
           {suffix}
@@ -109,9 +119,12 @@ function SidebarLabelText({
 export function SidebarNavigation({
   config,
   collapsibleOverrides,
+  badgesByLabel,
 }: React.PropsWithChildren<{
   config: SidebarConfig;
   collapsibleOverrides?: CollapsibleOverridesMap;
+  /** Ephemeral badges keyed by route label (e.g. 'common:routes.datasources'). Shown briefly then cleared by consumer. */
+  badgesByLabel?: Record<string, string>;
 }>) {
   const currentPath = useLocation().pathname ?? '';
   const { state } = useSidebar();
@@ -319,11 +332,21 @@ export function SidebarNavigation({
                           const labelTitleKey =
                             'title' in child ? child.title : child.label;
                           const labelTitle = translateKey(labelTitleKey);
+                          const childBadge = badgesByLabel?.[child.label];
                           const iconNode = (
                             <span className="flex h-5 w-5 shrink-0 items-center justify-center text-current">
                               {child.Icon}
                             </span>
                           );
+                          const badgeWhenCollapsed =
+                            isCollapsed && childBadge ? (
+                              <span
+                                className="bg-primary text-primary-foreground animate-in fade-in-0 zoom-in-95 flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold tabular-nums duration-300 ease-out"
+                                aria-hidden
+                              >
+                                {childBadge}
+                              </span>
+                            ) : null;
                           const textNode = (
                             <span
                               className={cn(
@@ -343,6 +366,7 @@ export function SidebarNavigation({
                                     ? (child.hasUnsavedChanges as boolean)
                                     : undefined
                                 }
+                                badge={childBadge}
                               />
                             </span>
                           );
@@ -378,6 +402,7 @@ export function SidebarNavigation({
                                       title={labelTitle}
                                     >
                                       {iconNode}
+                                      {badgeWhenCollapsed}
                                       {textNode}
                                       <ChevronDown
                                         className={cn(
@@ -390,6 +415,7 @@ export function SidebarNavigation({
                                   ) : (
                                     <div className={rowClassName}>
                                       {iconNode}
+                                      {badgeWhenCollapsed}
                                       {textNode}
                                       <ChevronDown
                                         className={cn(
@@ -423,6 +449,7 @@ export function SidebarNavigation({
                                 title={labelTitle}
                               >
                                 {iconNode}
+                                {badgeWhenCollapsed}
                                 {textNode}
                               </Link>
                             </SidebarMenuButton>
@@ -507,6 +534,11 @@ export function SidebarNavigation({
                                                         child
                                                           ? (child.hasUnsavedChanges as boolean)
                                                           : undefined
+                                                      }
+                                                      badge={
+                                                        badgesByLabel?.[
+                                                          child.label
+                                                        ]
                                                       }
                                                     />
                                                   </span>

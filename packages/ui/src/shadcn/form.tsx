@@ -55,6 +55,9 @@ const useFormField = () => {
   }
 
   const fieldState = getFieldState(fieldContext.name, formState);
+  const showValidationError = fieldState.isTouched || formState.submitCount > 0;
+  const errorForDisplay =
+    fieldState.error && showValidationError ? fieldState.error : undefined;
 
   const { id } = itemContext;
 
@@ -65,6 +68,8 @@ const useFormField = () => {
     formDescriptionId: `${id}-form-item-description`,
     formMessageId: `${id}-form-item-message`,
     ...fieldState,
+    error: errorForDisplay,
+    invalid: !!errorForDisplay,
   };
 };
 
@@ -160,7 +165,11 @@ const FormMessage = React.forwardRef<
     <p
       ref={ref}
       id={formMessageId}
-      className={cn('text-destructive text-[0.8rem] font-medium', className)}
+      className={cn(
+        'text-[0.8rem] font-medium',
+        error && 'text-destructive dark:text-red-300',
+        className,
+      )}
       {...props}
     >
       {body}

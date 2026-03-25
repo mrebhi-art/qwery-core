@@ -131,7 +131,7 @@ function getDriverFactoryFromModule(mod: DriverModule): unknown {
   return typeof factory === 'function' ? factory : undefined;
 }
 
-const loadedDrivers = new Set<string>();
+const driverLoadPromises = new Map<string, Promise<void>>();
 
 async function loadDriverModule(driverId: string): Promise<DriverModule> {
   const importFn = driverImports.get(driverId);
@@ -168,6 +168,7 @@ export async function getDriverInstance(
 ): Promise<ReturnType<DriverFactory>> {
   ensureDiscoveryInitialized();
   let factory = datasources.getDriverRegistration(driver.id)?.factory;
+
   if (factory) {
     const driverContext: DriverContext = {
       ...context,
@@ -176,30 +177,50 @@ export async function getDriverInstance(
     return factory(driverContext);
   }
 
-  if (!loadedDrivers.has(driver.id)) {
-    loadedDrivers.add(driver.id);
-    try {
-      const mod = await loadDriverModule(driver.id);
-      const driverFactory = getDriverFactoryFromModule(mod);
+  let loadPromise = driverLoadPromises.get(driver.id);
 
-      if (typeof driverFactory === 'function') {
-        factory = driverFactory as DriverFactory;
-        datasources.registerDriver(
-          driver.id,
-          factory,
-          /* istanbul ignore next -- fallback when runtime unspecified -- @preserve */
-          driver.runtime ?? 'node',
-        );
-      } else {
-        throw new Error(
-          `Driver ${driver.id} did not export a driverFactory or default function`,
-        );
+  if (!loadPromise) {
+    loadPromise = (async () => {
+      try {
+        let mod: DriverModule;
+
+        if (driver.runtime === 'node') {
+          mod = await loadDriverModule(driver.id);
+        } else {
+          const entry = driver.entry ?? './dist/driver.js';
+          const fileName = entry.split(/[/\\]/).pop() || 'driver.js';
+          const g = globalThis as unknown as {
+            window?: { location: { origin: string } };
+          };
+          const origin = g.window?.location?.origin ?? '';
+          const url = `${origin}/extensions/${driver.id}/${fileName}`;
+          const dynamicImport = new Function('url', 'return import(url)');
+          mod = await dynamicImport(url);
+        }
+
+        const driverFactory = getDriverFactoryFromModule(mod);
+
+        if (typeof driverFactory === 'function') {
+          datasources.registerDriver(
+            driver.id,
+            driverFactory as DriverFactory,
+            driver.runtime ?? 'node',
+          );
+        } else {
+          throw new Error(
+            `Driver ${driver.id} did not export a driverFactory or default function`,
+          );
+        }
+      } finally {
+        driverLoadPromises.delete(driver.id);
       }
-    } catch (err) {
-      loadedDrivers.delete(driver.id);
-      throw err;
-    }
+    })();
+
+    driverLoadPromises.set(driver.id, loadPromise);
   }
+
+  await loadPromise;
+  factory = datasources.getDriverRegistration(driver.id)?.factory;
 
   /* istanbul ignore if -- defensive, unreachable in normal flow -- @preserve */
   if (!factory) {

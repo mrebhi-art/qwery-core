@@ -13,6 +13,7 @@ import { Button } from '@qwery/ui/button';
 import { Input } from '@qwery/ui/input';
 import { Trans } from '@qwery/ui/trans';
 import { cn } from '@qwery/ui/utils';
+import { GITHUB_URLS } from '@qwery/shared/github';
 import { shouldInvertDatasourceIcon } from '@qwery/shared/utils';
 
 import { DatasourceConnectSheet } from './datasource-connect-sheet';
@@ -39,17 +40,33 @@ export function NewDatasource({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedDatasource, setSelectedDatasource] =
     useState<DatasourceExtension | null>(null);
+  const [initialFormValues, setInitialFormValues] = useState<
+    Record<string, unknown> | undefined
+  >(undefined);
 
   const filterTags = ['SQL', 'Files', 'SaaS', 'API'];
 
   const openDrawerFor = useCallback((ds: DatasourceExtension) => {
     setSelectedDatasource(ds);
+    setInitialFormValues(undefined);
     setDrawerOpen(true);
   }, []);
 
   const closeDrawer = useCallback(() => {
     setDrawerOpen(false);
+    setInitialFormValues(undefined);
   }, []);
+
+  const handleSwitchToExtension = useCallback(
+    (extensionId: string, values: Record<string, unknown>) => {
+      const ds = datasources.find((d) => d.id === extensionId);
+      if (ds) {
+        setSelectedDatasource(ds);
+        setInitialFormValues(values);
+      }
+    },
+    [datasources],
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -173,7 +190,7 @@ export function NewDatasource({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-border/40 bg-background/95 sticky top-0 z-10 border-b backdrop-blur-sm">
+      <div className="border-border/40 bg-background/95 sticky top-0 z-10 backdrop-blur-sm">
         <div className="px-8 py-6 lg:px-16 lg:py-10">
           <div className="flex flex-col gap-5">
             <div>
@@ -256,7 +273,7 @@ export function NewDatasource({
                 Try adjusting your filters or search.
               </p>
               <a
-                href="https://github.com/guepard/qwery-studio/issues/new"
+                href={GITHUB_URLS.newIssue}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-[#ffcb51] transition-colors hover:text-[#ffcb51]/80"
@@ -268,7 +285,7 @@ export function NewDatasource({
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
                 {paginatedDatasources.map((datasource, index) => {
                   const hasFailed = failedLogos.has(datasource.id);
                   const showLogo = datasource.icon && !hasFailed;
@@ -404,12 +421,17 @@ export function NewDatasource({
       {selectedDatasource && (
         <DatasourceConnectSheet
           open={drawerOpen}
-          onOpenChange={setDrawerOpen}
+          onOpenChange={(open) => {
+            setDrawerOpen(open);
+            if (!open) setInitialFormValues(undefined);
+          }}
           extensionId={selectedDatasource.id}
           projectSlug={project_id}
           extensionMeta={selectedDatasource}
           onSuccess={closeDrawer}
           onCancel={closeDrawer}
+          initialFormValues={initialFormValues}
+          onSwitchToExtension={handleSwitchToExtension}
         />
       )}
     </div>

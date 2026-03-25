@@ -1,7 +1,6 @@
-'use client';
-
 import {
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -16,13 +15,13 @@ import {
   FileJson,
   Copy,
   Check,
-  Info,
   Loader2,
 } from 'lucide-react';
 import { cn } from '@qwery/ui/utils';
 import { Button } from '@qwery/ui/button';
 import {
   getDatasourcePreviewUrl,
+  getUrlForValidation,
   validateDatasourceUrl,
   isGsheetLikeUrl,
   type DatasourceExtensionMeta,
@@ -33,10 +32,28 @@ import {
 } from '~/lib/utils/google-sheets-preview';
 import { fetchJsonData } from '~/lib/utils/json-preview-utils';
 import { fetchParquetData, fetchCsvData } from '~/lib/utils/data-preview-utils';
-
-import { getErrorKey } from '~/lib/utils/error-key';
 import { DatasourcePublishingGuide } from './datasource-publishing-guide';
 import { JsonViewer, type JsonViewMode } from './json-viewer';
+
+const PREVIEW_REVEAL_DELAY_MS = 2500;
+
+function getPreviewTitle(
+  meta: DatasourceExtensionMeta | undefined | null,
+): string {
+  if (!meta) return 'Preview';
+  const id = meta.id ?? '';
+  const format = meta.previewDataFormat;
+  const kind = meta.previewUrlKind;
+  if (id === 'gsheet-csv' || kind === 'embeddable')
+    return 'Google Sheets preview';
+  if (kind === 'data-file') {
+    if (format === 'json') return 'JSON preview';
+    if (format === 'parquet') return 'Parquet preview';
+    if (format === 'csv') return 'CSV preview';
+    return 'Data preview';
+  }
+  return 'Preview';
+}
 
 export interface DatasourcePreviewRef {
   refresh: () => void;
@@ -57,7 +74,7 @@ export const DatasourcePreview = forwardRef<
     className,
     isTestConnectionLoading: _isTestConnectionLoading = false,
   },
-  _ref,
+  ref,
 ) {
   const { t } = useTranslation('common');
   const { theme, resolvedTheme } = useTheme();
@@ -67,64 +84,103 @@ export const DatasourcePreview = forwardRef<
     [formValues, extensionMeta],
   );
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [debouncedPreviewUrl, setDebouncedPreviewUrl] = useState<string | null>(
-    previewUrl,
-  );
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [publicationStatus, setPublicationStatus] =
-    useState<PublicationStatus>('unknown');
-  const [isIframeLoading, setIsIframeLoading] = useState(false);
-  const [jsonData, setJsonData] = useState<unknown>(null);
-  const [jsonError, setJsonError] = useState<string | null>(null);
-  const [isLoadingJson, setIsLoadingJson] = useState(false);
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
-  const [copied, setCopied] = useState(false);
-  const [viewMode, setViewMode] = useState<JsonViewMode>('table');
-  const [isWasmFallbackRequested, setIsWasmFallbackRequested] = useState(false);
-  const [showPublishingGuide, setShowPublishingGuide] = useState(false);
 
-  useEffect(() => {
-    const next = extensionMeta?.previewDataFormat === 'json' ? 'tree' : 'table';
-    queueMicrotask(() => setViewMode(next));
-  }, [extensionMeta?.previewDataFormat]);
+  const [previewState, setPreviewState] = useState({
+    refreshKey: 0,
+    isIframeLoading: false,
+    previewRevealReady: false,
+    publicationStatus: 'unknown' as PublicationStatus,
+    isWasmFallbackRequested: false,
+  });
 
-  // Debounce preview URL updates by 1 second
-  useEffect(() => {
-    if (!previewUrl) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setDebouncedPreviewUrl(null);
-      queueMicrotask(() => setPublicationStatus('unknown'));
-      return;
-    }
+  const [dataState, setDataState] = useState({
+    jsonData: null as unknown,
+    jsonError: null as string | null,
+    isLoadingJson: false,
+    expandedPaths: new Set<string>() as Set<string>,
+    copied: false,
+    viewMode: 'table' as JsonViewMode,
+  });
 
-    const timeoutId = setTimeout(() => {
-      setDebouncedPreviewUrl(previewUrl);
-      setRefreshKey((prev) => prev + 1);
-      setIsIframeLoading(true);
-      setIsWasmFallbackRequested(false);
-      setShowPublishingGuide(false);
-      setJsonData(null);
-      setJsonError(null);
-    }, 1000);
+  const refreshKey = previewState.refreshKey;
+  const isIframeLoading = previewState.isIframeLoading;
+  const previewRevealReady = previewState.previewRevealReady;
+  const publicationStatus = previewState.publicationStatus;
+  const isWasmFallbackRequested = previewState.isWasmFallbackRequested;
+  const jsonData = dataState.jsonData;
+  const jsonError = dataState.jsonError;
+  const isLoadingJson = dataState.isLoadingJson;
+  const expandedPaths = dataState.expandedPaths;
+  const copied = dataState.copied;
+  const viewMode = dataState.viewMode;
 
-    return () => clearTimeout(timeoutId);
-  }, [previewUrl]);
+  const validationError = useMemo(() => {
+    const url = getUrlForValidation(formValues ?? null, extensionMeta);
+    return validateDatasourceUrl(extensionMeta, url).error ?? null;
+  }, [extensionMeta, formValues]);
 
   const needsPublicationCheck =
     extensionMeta?.previewUrlKind === 'embeddable' &&
-    isGsheetLikeUrl(debouncedPreviewUrl ?? previewUrl);
+    isGsheetLikeUrl(previewUrl);
+  const showPublishingGuide =
+    needsPublicationCheck && publicationStatus === 'not-published';
 
   useEffect(() => {
-    if (needsPublicationCheck && publicationStatus === 'not-published') {
-      const timer = setTimeout(() => setShowPublishingGuide(true), 2500);
-      return () => clearTimeout(timer);
+    const next = extensionMeta?.previewDataFormat === 'json' ? 'tree' : 'table';
+    queueMicrotask(() =>
+      setDataState((d) => ({ ...d, viewMode: next as JsonViewMode })),
+    );
+  }, [extensionMeta?.previewDataFormat]);
+
+  useEffect(() => {
+    if (!previewUrl) {
+      queueMicrotask(() =>
+        setPreviewState((p) => ({ ...p, publicationStatus: 'unknown' })),
+      );
+      return;
     }
-  }, [needsPublicationCheck, publicationStatus]);
+    queueMicrotask(() => {
+      setPreviewState((p) => ({
+        ...p,
+        refreshKey: p.refreshKey + 1,
+        isIframeLoading: true,
+        isWasmFallbackRequested: false,
+      }));
+      setDataState((d) => ({
+        ...d,
+        jsonData: null,
+        jsonError: null,
+      }));
+    });
+  }, [previewUrl, extensionMeta?.previewUrlKind]);
 
   useEffect(() => {
-    if (!needsPublicationCheck || !previewUrl) {
-      queueMicrotask(() => setPublicationStatus('unknown'));
+    if (!previewUrl) {
+      queueMicrotask(() =>
+        setPreviewState((p) => ({ ...p, previewRevealReady: false })),
+      );
+      return;
+    }
+    if (!needsPublicationCheck) {
+      queueMicrotask(() =>
+        setPreviewState((p) => ({ ...p, previewRevealReady: true })),
+      );
+      return;
+    }
+    queueMicrotask(() =>
+      setPreviewState((p) => ({ ...p, previewRevealReady: false })),
+    );
+    const timer = setTimeout(() => {
+      setPreviewState((p) => ({ ...p, previewRevealReady: true }));
+    }, PREVIEW_REVEAL_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [previewUrl, needsPublicationCheck]);
+
+  useEffect(() => {
+    if (!needsPublicationCheck || !previewUrl || validationError) {
+      queueMicrotask(() =>
+        setPreviewState((p) => ({ ...p, publicationStatus: 'unknown' })),
+      );
       return;
     }
 
@@ -132,154 +188,190 @@ export const DatasourcePreview = forwardRef<
       | string
       | undefined;
     if (!sharedLink || typeof sharedLink !== 'string') {
-      queueMicrotask(() => setPublicationStatus('unknown'));
+      queueMicrotask(() =>
+        setPreviewState((p) => ({ ...p, publicationStatus: 'unknown' })),
+      );
       return;
     }
 
-    queueMicrotask(() => setPublicationStatus('checking'));
+    queueMicrotask(() =>
+      setPreviewState((p) => ({ ...p, publicationStatus: 'checking' })),
+    );
     detectPublishedState(sharedLink)
       .then((status) => {
-        setPublicationStatus(status);
+        setPreviewState((p) => ({ ...p, publicationStatus: status }));
       })
       .catch(() => {
-        setPublicationStatus('unknown');
+        setPreviewState((p) => ({ ...p, publicationStatus: 'unknown' }));
       });
-  }, [needsPublicationCheck, previewUrl, formValues]);
-
-  // Use unified validation logic
-  useEffect(() => {
-    const sharedLink = (formValues?.sharedLink || formValues?.url) as
-      | string
-      | undefined;
-    const { error } = validateDatasourceUrl(extensionMeta, sharedLink);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setValidationError(error);
-  }, [extensionMeta, formValues]);
+  }, [needsPublicationCheck, previewUrl, formValues, validationError]);
 
   const needsDataFetching = extensionMeta?.previewUrlKind === 'data-file';
   const dataFormat = extensionMeta?.previewDataFormat;
-  const isGSheetUrl = (url: string | null) =>
-    !!url?.includes('docs.google.com/spreadsheets');
-  const isGoogleSheets = isGSheetUrl(debouncedPreviewUrl);
 
   useEffect(() => {
-    if (!needsDataFetching || !debouncedPreviewUrl) {
-      if (!isGSheetUrl(debouncedPreviewUrl)) {
-        queueMicrotask(() => {
-          setJsonData(null);
-          setJsonError(null);
-          setIsLoadingJson(false);
-        });
+    if (!needsDataFetching || !previewUrl || validationError) {
+      if (!isGsheetLikeUrl(previewUrl)) {
+        queueMicrotask(() =>
+          setDataState((d) => ({
+            ...d,
+            jsonData: null,
+            jsonError: null,
+            isLoadingJson: false,
+          })),
+        );
       }
       return;
     }
 
-    const gsheet = isGSheetUrl(debouncedPreviewUrl);
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    const gsheet = isGsheetLikeUrl(previewUrl);
     const isDirectCsv = dataFormat === 'csv' && !gsheet;
     if (!isDirectCsv && dataFormat !== 'json' && dataFormat !== 'parquet') {
-      return;
+      return () => controller.abort();
     }
 
     queueMicrotask(() => {
-      setIsLoadingJson(true);
-      setJsonError(null);
+      if (signal.aborted) return;
+      setDataState((d) => ({ ...d, isLoadingJson: true, jsonError: null }));
     });
 
     const fetcher =
       dataFormat === 'json'
-        ? fetchJsonData(debouncedPreviewUrl)
+        ? fetchJsonData(previewUrl)
         : dataFormat === 'parquet'
-          ? fetchParquetData(debouncedPreviewUrl)
-          : fetchCsvData(debouncedPreviewUrl);
+          ? fetchParquetData(previewUrl)
+          : fetchCsvData(previewUrl);
 
     fetcher
       .then((result) => {
+        if (signal.aborted) return;
         if (result.error) {
-          setJsonError(getErrorKey(new Error(result.error), t));
-          setJsonData(null);
+          setDataState((d) => ({
+            ...d,
+            jsonError: result.error,
+            jsonData: null,
+          }));
         } else {
-          setJsonData(result.data);
-          setExpandedPaths(new Set(['root']));
+          setDataState((d) => ({
+            ...d,
+            jsonData: result.data,
+            expandedPaths: new Set(['root']),
+          }));
         }
       })
       .finally(() => {
-        setIsLoadingJson(false);
+        if (signal.aborted) return;
+        setDataState((d) => ({ ...d, isLoadingJson: false }));
       });
-  }, [debouncedPreviewUrl, refreshKey, needsDataFetching, dataFormat, t]);
+
+    return () => controller.abort();
+  }, [
+    previewUrl,
+    refreshKey,
+    needsDataFetching,
+    dataFormat,
+    t,
+    validationError,
+  ]);
 
   useEffect(() => {
     if (
       !needsPublicationCheck ||
       publicationStatus !== 'not-published' ||
-      !debouncedPreviewUrl ||
+      !previewUrl ||
       !isWasmFallbackRequested
     ) {
       return;
     }
 
-    // Convert to CSV export URL for WASM try
-    const gSheetIdMatch = debouncedPreviewUrl.match(
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    const gSheetIdMatch = previewUrl.match(
       /\/spreadsheets\/d\/(e\/)?([a-zA-Z0-9-_]{20,})/,
     );
-    if (!gSheetIdMatch) return;
+    if (!gSheetIdMatch) return () => controller.abort();
 
     const sheetId = gSheetIdMatch[2];
     const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsLoadingJson(true);
-    setJsonError(null); // Clear any previous error
+    queueMicrotask(() =>
+      setDataState((d) => ({ ...d, isLoadingJson: true, jsonError: null })),
+    );
     fetchCsvData(csvUrl)
       .then((result) => {
+        if (signal.aborted) return;
         if (!result.error && result.data) {
-          setJsonData(result.data);
-          setExpandedPaths(new Set(['root']));
+          setDataState((d) => ({
+            ...d,
+            jsonData: result.data,
+            expandedPaths: new Set(['root']),
+          }));
         } else if (result.error) {
-          setJsonError(getErrorKey(new Error(result.error), t));
+          setDataState((d) => ({
+            ...d,
+            jsonError: result.error,
+          }));
         }
       })
       .finally(() => {
-        setIsLoadingJson(false);
+        if (signal.aborted) return;
+        setDataState((d) => ({ ...d, isLoadingJson: false }));
       });
+
+    return () => controller.abort();
   }, [
     needsPublicationCheck,
     publicationStatus,
-    debouncedPreviewUrl,
+    previewUrl,
     isWasmFallbackRequested,
     t,
   ]);
 
-  const handleRefresh = () => {
-    setIsIframeLoading(true);
-    setRefreshKey((prev) => prev + 1);
+  const handleRefresh = useCallback(() => {
+    setPreviewState((p) => ({
+      ...p,
+      isIframeLoading: true,
+      refreshKey: p.refreshKey + 1,
+    }));
     if (iframeRef.current) {
-      // eslint-disable-next-line no-self-assign
+      // Force iframe reload by reassigning src
+      // eslint-disable-next-line no-self-assign -- intentional refresh
       iframeRef.current.src = iframeRef.current.src;
     }
-  };
+  }, []);
 
-  const handleIframeLoad = () => {
-    setIsIframeLoading(false);
-  };
+  useImperativeHandle(ref, () => ({ refresh: handleRefresh }), [handleRefresh]);
+
+  const handleIframeLoad = useCallback(() => {
+    setPreviewState((p) => ({ ...p, isIframeLoading: false }));
+  }, []);
 
   const togglePath = useCallback((path: string) => {
-    setExpandedPaths((prev) => {
-      const next = new Set(prev);
+    setDataState((d) => {
+      const next = new Set(d.expandedPaths);
       if (next.has(path)) {
         next.delete(path);
       } else {
         next.add(path);
       }
-      return next;
+      return { ...d, expandedPaths: next };
     });
+  }, []);
+
+  const setViewMode = useCallback((mode: JsonViewMode) => {
+    setDataState((d) => ({ ...d, viewMode: mode }));
   }, []);
 
   const handleCopyJson = useCallback(async () => {
     if (jsonData === null) return;
     try {
       await navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setDataState((d) => ({ ...d, copied: true }));
+      setTimeout(() => setDataState((d) => ({ ...d, copied: false })), 2000);
     } catch (error) {
       console.error('Failed to copy JSON:', error);
     }
@@ -289,21 +381,27 @@ export const DatasourcePreview = forwardRef<
   const currentTheme = resolvedTheme || theme || 'light';
   const themeParam = currentTheme === 'dark' ? '&theme=dark' : '';
 
-  const baseUrl: string | undefined =
-    debouncedPreviewUrl ?? previewUrl ?? undefined;
-  const displayUrl: string | undefined = baseUrl
-    ? baseUrl +
-      (baseUrl.includes('?')
-        ? '&' + themeParam.substring(1)
-        : '?' + themeParam.substring(1))
+  const iframeBaseUrl: string | null = useMemo(() => {
+    if (!previewUrl) return null;
+    return previewUrl;
+  }, [previewUrl]);
+
+  const displayUrl: string | undefined = iframeBaseUrl
+    ? themeParam
+      ? iframeBaseUrl +
+        (iframeBaseUrl.includes('?') ? '&' : '?') +
+        themeParam.substring(1)
+      : iframeBaseUrl
     : undefined;
 
   const supportsPreview = supportsPreviewProp === true;
-  const usesJsonFormat = dataFormat === 'json';
+  const extensionId = extensionMeta?.id ?? null;
+  const usesJsonFormat = dataFormat === 'json' || extensionId === 'json-online';
   const usesParquetFormat = dataFormat === 'parquet';
-  const usesCsvFormat = dataFormat === 'csv';
+  const usesCsvFormat =
+    (dataFormat === 'csv' || extensionId === 'csv-online') &&
+    !needsPublicationCheck;
   const hasValidUrl = Boolean(previewUrl) && !validationError;
-  const hasPreview = Boolean(debouncedPreviewUrl) && !validationError;
 
   // Early return if datasource doesn't support preview
   if (!supportsPreview) {
@@ -335,38 +433,75 @@ export const DatasourcePreview = forwardRef<
     return null;
   }
 
+  const showWasmTableView =
+    usesJsonFormat ||
+    usesParquetFormat ||
+    usesCsvFormat ||
+    (needsPublicationCheck && (!!jsonData || isWasmFallbackRequested));
+
+  const showPublishingGuideCollapsible =
+    hasValidUrl &&
+    previewRevealReady &&
+    showPublishingGuide &&
+    !jsonData &&
+    !isWasmFallbackRequested;
+
   return (
     <div className={cn('flex flex-col space-y-3', className)}>
-      {/* Preview subtitle label */}
-      {hasPreview && (
-        <div className="shrink-0">
-          <h3 className="text-foreground text-sm font-semibold">Preview</h3>
+      {/* Guide only when sheet is not published; hidden when published so iframe is shown without it */}
+      {showPublishingGuideCollapsible && (
+        <div className="shrink-0 space-y-2">
+          <DatasourcePublishingGuide isPublished={false} isChecking={false} />
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 border-dashed text-[11px]"
+              onClick={() =>
+                setPreviewState((p) => ({
+                  ...p,
+                  isWasmFallbackRequested: true,
+                }))
+              }
+              disabled={isLoadingJson}
+            >
+              {isLoadingJson ? (
+                <>
+                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                  Analyzing…
+                </>
+              ) : (
+                'Try Direct Data Preview'
+              )}
+            </Button>
+          </div>
         </div>
       )}
 
-      {/* Live preview collapsible - above main preview */}
-      {isGoogleSheets && showPublishingGuide && (
-        <div className="shrink-0">
-          <DatasourcePublishingGuide
-            isPublished={
-              publicationStatus === 'published'
-                ? true
-                : publicationStatus === 'not-published'
-                  ? false
-                  : null
-            }
-            isChecking={publicationStatus === 'checking'}
-          />
+      {/* During delay: full-width loading (same as preview container) */}
+      {hasValidUrl && !previewRevealReady && (
+        <div className="group border-border bg-muted/30 dark:bg-muted/25 relative flex min-h-[300px] flex-1 flex-col overflow-hidden rounded-lg border transition-colors duration-300">
+          <div className="flex flex-1 items-center justify-center">
+            <p className="text-muted-foreground flex items-center gap-2 text-sm">
+              <Loader2 className="size-4 animate-spin" />
+              Checking preview availability…
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Preview container - flex-1 to take available height */}
-      {hasPreview && (
+      {hasValidUrl && previewRevealReady && (
+        <div className="shrink-0">
+          <h3 className="text-foreground text-sm font-semibold">
+            {getPreviewTitle(extensionMeta)}
+          </h3>
+        </div>
+      )}
+
+      {hasValidUrl && previewRevealReady && (
         <div className="group border-border bg-muted/30 dark:bg-muted/25 relative flex min-h-[300px] flex-1 flex-col overflow-hidden rounded-lg border transition-colors duration-300">
           <div className="relative flex h-full min-h-0 w-full flex-1 flex-col">
-            {usesJsonFormat ||
-            usesParquetFormat ||
-            (usesCsvFormat && !!jsonData) ? (
+            {showWasmTableView ? (
               <div className="relative flex min-h-0 flex-1 flex-col items-stretch overflow-hidden">
                 {isLoadingJson ? (
                   <div className="bg-muted/30 dark:bg-muted/20 flex h-full w-full items-center justify-center">
@@ -383,7 +518,9 @@ export const DatasourcePreview = forwardRef<
                       <h4 className="text-foreground text-lg font-semibold">
                         {usesParquetFormat
                           ? 'Failed to load Parquet'
-                          : 'Failed to load JSON'}
+                          : usesCsvFormat
+                            ? 'Failed to load CSV'
+                            : 'Failed to load JSON'}
                       </h4>
                       <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
                         {jsonError}
@@ -408,51 +545,15 @@ export const DatasourcePreview = forwardRef<
                       viewMode={viewMode}
                       onViewModeChange={setViewMode}
                       itemsPerPage={
-                        usesParquetFormat || usesCsvFormat ? 20 : undefined
+                        usesParquetFormat ||
+                        usesCsvFormat ||
+                        needsPublicationCheck
+                          ? 20
+                          : undefined
                       }
                     />
                   </div>
                 ) : null}
-              </div>
-            ) : needsPublicationCheck &&
-              publicationStatus === 'not-published' &&
-              !jsonData ? (
-              <div className="bg-muted/30 flex h-full items-center justify-center">
-                <div className="flex flex-col items-center gap-3 px-6 text-center">
-                  <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10">
-                    <Info className="size-8 text-amber-600 dark:text-amber-500" />
-                  </div>
-                  <div className="text-foreground text-sm font-semibold">
-                    Preview Not Available Yet
-                  </div>
-                  <div className="text-muted-foreground max-w-xs text-xs">
-                    Google requires sheets to be &quot;Published to the
-                    web&quot; to be viewed inside other applications.
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="bg-background/50 mt-4 h-8 border-dashed text-[11px] transition-all hover:border-solid"
-                    onClick={() => setIsWasmFallbackRequested(true)}
-                    disabled={isLoadingJson}
-                  >
-                    {isLoadingJson ? (
-                      <>
-                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        Analyzing Spreadsheet...
-                      </>
-                    ) : (
-                      'Try Direct Data Preview'
-                    )}
-                  </Button>
-
-                  {!isLoadingJson && showPublishingGuide && (
-                    <p className="text-muted-foreground animate-in fade-in slide-in-from-bottom-2 mt-4 text-[10px] italic duration-700">
-                      Follow the instructions below to enable the live preview.
-                    </p>
-                  )}
-                </div>
               </div>
             ) : (
               <div className="relative min-h-0 flex-1">
@@ -482,10 +583,7 @@ export const DatasourcePreview = forwardRef<
             )}
 
             {/* Bottom-Left Utility Controls (Hover only) */}
-            {(!!jsonData ||
-              (needsPublicationCheck &&
-                publicationStatus === 'published' &&
-                !validationError)) && (
+            {(!!jsonData || (displayUrl && !validationError)) && (
               <div className="pointer-events-auto absolute bottom-3 left-3 z-30 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                 <Button
                   variant="ghost"
@@ -496,24 +594,18 @@ export const DatasourcePreview = forwardRef<
                 >
                   <RefreshCw className="size-3.5" />
                 </Button>
-                {displayUrl &&
-                  !(
-                    needsPublicationCheck &&
-                    publicationStatus === 'not-published'
-                  ) && (
-                    <a
-                      href={displayUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-muted-foreground/70 hover:text-foreground bg-background/90 border-border/40 flex h-7 w-7 items-center justify-center rounded border backdrop-blur-sm transition-colors"
-                      title="Open in new tab"
-                    >
-                      <ExternalLink className="size-3.5" />
-                    </a>
-                  )}
-                {(usesJsonFormat ||
-                  usesParquetFormat ||
-                  (usesCsvFormat && !!jsonData)) &&
+                {displayUrl && (
+                  <a
+                    href={displayUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-muted-foreground/70 hover:text-foreground bg-background/90 border-border/40 flex h-7 w-7 items-center justify-center rounded border backdrop-blur-sm transition-colors"
+                    title="Open in new tab"
+                  >
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                )}
+                {showWasmTableView &&
                   jsonData !== null &&
                   !isLoadingJson &&
                   !jsonError && (
@@ -537,15 +629,15 @@ export const DatasourcePreview = forwardRef<
             )}
 
             {/* Bottom-Right Controls: View Mode Toggles (Tree/Raw) */}
-            {(usesJsonFormat ||
-              usesParquetFormat ||
-              (usesCsvFormat && !!jsonData)) &&
+            {showWasmTableView &&
               jsonData !== null &&
               !isLoadingJson &&
               !jsonError && (
                 <div className="pointer-events-auto absolute right-3 bottom-3 z-30 flex items-center">
                   <div className="border-border/40 bg-background/60 mr-2 flex items-center gap-0.5 rounded-md border p-0.5 shadow-sm backdrop-blur-md">
-                    {(usesParquetFormat || (usesCsvFormat && !!jsonData)) && (
+                    {(usesParquetFormat ||
+                      (usesCsvFormat && !!jsonData) ||
+                      needsPublicationCheck) && (
                       <Button
                         variant={viewMode === 'table' ? 'default' : 'ghost'}
                         size="sm"
@@ -592,30 +684,6 @@ export const DatasourcePreview = forwardRef<
                 </div>
               )}
           </div>
-        </div>
-      )}
-
-      {/* Publishing instructions card below */}
-      {needsPublicationCheck && showPublishingGuide && !jsonData && (
-        <div
-          className={cn(
-            'shrink-0 transition-all duration-500 ease-out',
-            publicationStatus === 'checking' ||
-              publicationStatus === 'published'
-              ? 'pointer-events-none max-h-0 translate-y-2 overflow-hidden opacity-0'
-              : 'translate-y-0 opacity-100',
-          )}
-        >
-          <DatasourcePublishingGuide
-            isPublished={
-              publicationStatus === 'published'
-                ? true
-                : publicationStatus === 'not-published'
-                  ? false
-                  : null
-            }
-            isChecking={publicationStatus === 'checking'}
-          />
         </div>
       )}
     </div>

@@ -1,36 +1,103 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { useParams } from 'react-router';
+import { PanelRightOpen } from 'lucide-react';
 
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarHeader,
+  SidebarTrigger,
+  useSidebar,
 } from '@qwery/ui/shadcn-sidebar';
 import { SidebarNavigation } from '@qwery/ui/sidebar-navigation';
+import { Button } from '@qwery/ui/button';
+import { cn } from '@qwery/ui/utils';
 
 import { AccountDropdownContainer } from '~/components/account-dropdown-container';
+import { AppLogo } from '~/components/app-logo';
 import { createNavigationConfig } from '~/config/datasource.navigation.config';
-import { DevProfiler } from '~/lib/perf/dev-profiler';
-import { ProjectChatNotebookSidebarContent } from '../../project/_components/project-chat-notebook-sidebar-content';
+import { SidebarOrgSelector } from '../../project/_components/sidebar-org-selector';
 
 export const DatasourceSidebar = memo(function DatasourceSidebar() {
   const params = useParams();
   const slug = params.slug as string;
+  const { toggleSidebar, state } = useSidebar();
+  const isCollapsed = state === 'collapsed';
 
   const navigationConfig = createNavigationConfig(slug);
+
+  const handleExpandClick = useCallback(() => {
+    toggleSidebar();
+  }, [toggleSidebar]);
+
   return (
     <Sidebar
-      collapsible="none"
-      className="w-[18rem] max-w-[18rem] min-w-[18rem] border-r"
+      className={cn(
+        'w-(--sidebar-width) max-w-(--sidebar-width) border-r',
+        'group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[collapsible=icon]:max-w-(--sidebar-width-icon) group-data-[collapsible=icon]:min-w-0',
+      )}
     >
-      <SidebarContent className="overflow-hidden p-4">
+      <SidebarHeader
+        className={cn(
+          'flex flex-row items-center justify-between gap-2 p-3',
+          'group-data-[collapsible=icon]:p-3',
+        )}
+      >
+        <div
+          className={cn(
+            'group/logoarea flex size-9 shrink-0 items-center justify-center transition-opacity duration-200',
+            'group-data-[collapsible=icon]:relative group-data-[collapsible=icon]:cursor-pointer',
+          )}
+        >
+          <AppLogo
+            className={cn(
+              'h-6 w-6 shrink-0 transition-opacity duration-200',
+              'group-data-[collapsible=icon]:relative group-data-[collapsible=icon]:z-0 group-data-[collapsible=icon]:group-hover/logoarea:opacity-0',
+            )}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              'hidden h-7 w-7 shrink-0 rounded-md transition-opacity duration-200',
+              'group-data-[collapsible=icon]:hover:bg-sidebar-accent group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:inset-0 group-data-[collapsible=icon]:z-10 group-data-[collapsible=icon]:flex! group-data-[collapsible=icon]:size-full group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:group-hover/logoarea:opacity-100',
+            )}
+            onClick={handleExpandClick}
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
+          >
+            <PanelRightOpen className="size-4" />
+          </Button>
+        </div>
+        <SidebarTrigger
+          title="Collapse sidebar"
+          className={cn(
+            'transition-[opacity,transform] duration-300 ease-in-out',
+            isCollapsed
+              ? 'pointer-events-none -translate-x-1 opacity-0'
+              : 'translate-x-0 opacity-100',
+          )}
+        />
+      </SidebarHeader>
+      <SidebarContent
+        className={cn(
+          'overflow-hidden px-3',
+          'group-data-[collapsible=icon]:px-3 group-data-[collapsible=icon]:py-1.5',
+        )}
+      >
+        <div
+          className={cn(
+            'overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out',
+            isCollapsed ? 'max-h-0 opacity-0' : 'mt-2 max-h-24 opacity-100',
+          )}
+        >
+          <SidebarOrgSelector />
+        </div>
         <SidebarNavigation config={navigationConfig} />
-        <DevProfiler id="DatasourceSidebar/ChatNotebook">
-          <ProjectChatNotebookSidebarContent />
-        </DevProfiler>
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="p-1.5">
         <AccountDropdownContainer />
       </SidebarFooter>
     </Sidebar>

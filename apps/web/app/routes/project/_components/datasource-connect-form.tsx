@@ -8,7 +8,7 @@ import React, {
   useState,
 } from 'react';
 import { z as zLib } from 'zod';
-import { Check, Loader2, Pencil, Shuffle, X } from 'lucide-react';
+import { Check, Database, Loader2, Pencil, Shuffle, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Datasource, DatasourceKind } from '@qwery/domain/entities';
 import { GetProjectBySlugService } from '@qwery/domain/services';
@@ -266,6 +266,7 @@ export function DatasourceConnectForm({
   }, [isFormValid, onFormValidityChange]);
 
   const { t, i18n } = useTranslation('common');
+  const [iconFailed, setIconFailed] = useState(false);
   const { repositories, workspace } = useWorkspace();
   const datasourceRepository = repositories.datasource;
   const projectRepository = repositories.project;
@@ -714,14 +715,27 @@ export function DatasourceConnectForm({
         <header className="space-y-3 px-4">
           <div className="flex min-w-0 items-center gap-4">
             <div className="bg-muted/30 flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
-              {extensionMeta.icon && (
-                <img
-                  src={extensionMeta.icon}
-                  alt={extensionMeta.name}
-                  className={cn(
-                    'h-9 w-9 object-contain',
-                    shouldInvertDatasourceIcon(extensionId) && 'dark:invert',
-                  )}
+              {extensionMeta.icon ? (
+                !iconFailed ? (
+                  <img
+                    src={extensionMeta.icon}
+                    alt={extensionMeta.name}
+                    className={cn(
+                      'h-9 w-9 object-contain',
+                      shouldInvertDatasourceIcon(extensionId) && 'dark:invert',
+                    )}
+                    onError={() => setIconFailed(true)}
+                  />
+                ) : (
+                  <Database
+                    className="text-muted-foreground/60 h-7 w-7"
+                    aria-hidden
+                  />
+                )
+              ) : (
+                <Database
+                  className="text-muted-foreground/60 h-7 w-7"
+                  aria-hidden
                 />
               )}
             </div>

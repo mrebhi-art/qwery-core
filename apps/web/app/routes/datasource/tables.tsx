@@ -14,6 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@qwery/ui/select';
+import { Label } from '@qwery/ui/label';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+} from '@qwery/ui/pagination';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,7 +32,14 @@ import { useGetDatasourceMetadata } from '~/lib/queries/use-get-datasource-metad
 import type { Table, Column } from '@qwery/domain/entities';
 import { Input } from '@qwery/ui/input';
 import { MagnifyingGlassIcon } from '@radix-ui/react-icons';
-import { X, Filter, Settings2 } from 'lucide-react';
+import {
+  X,
+  Filter,
+  Settings2,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  Loader2,
+} from 'lucide-react';
 import { Button } from '@qwery/ui/button';
 import { Skeleton } from '@qwery/ui/skeleton';
 
@@ -34,6 +47,32 @@ import type { Route } from './+types/tables';
 import { loadDatasourceBySlug } from '~/lib/loaders/load-datasource-by-slug';
 import pathsConfig, { createPath } from '~/config/paths.config';
 import { DevProfiler } from '~/lib/perf/dev-profiler';
+import { useDatasourceDdl } from '~/lib/mutations/use-datasource-ddl';
+import { getErrorKey } from '~/lib/utils/error-key';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@qwery/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@qwery/ui/dialog';
+import { toast } from 'sonner';
+
+type TableActionDialog =
+  | { kind: 'rename'; table: TableListItem }
+  | { kind: 'truncate'; table: TableListItem }
+  | { kind: 'delete'; table: TableListItem }
+  | null;
 
 const COLUMN_PICKER_ITEMS: {
   column: TableColumn;
@@ -77,6 +116,15 @@ export default function TablesPage(props: Route.ComponentProps) {
   const { datasource } = props.loaderData;
   const [selectedSchema, setSelectedSchema] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [pagination, setPagination] = useState(() => {
+    const raw =
+      typeof window !== 'undefined'
+        ? window.localStorage.getItem('datasource:tables:pageSize')
+        : null;
+    const parsed = raw ? Number(raw) : NaN;
+    const pageSize = Number.isFinite(parsed) && parsed > 0 ? parsed : 50;
+    return { page: 1, pageSize };
+  });
   const [visibleColumns, setVisibleColumns] = useState<TableColumn[]>(() => [
     ...DEFAULT_VISIBLE_TABLE_COLUMNS,
   ]);
@@ -85,6 +133,11 @@ export default function TablesPage(props: Route.ComponentProps) {
   const { data: metadata, isLoading } = useGetDatasourceMetadata(datasource, {
     enabled: !!datasource,
   });
+
+  const schemaActions = useDatasourceDdl(datasource);
+  const [tableDialog, setTableDialog] = useState<TableActionDialog>(null);
+  const [renameTableInput, setRenameTableInput] = useState('');
+  const [isMutating, setIsMutating] = useState(false);
 
   const schemas = useMemo(() => {
     if (!metadata?.schemas) return [];
@@ -113,6 +166,17 @@ export default function TablesPage(props: Route.ComponentProps) {
     return tables;
   }, [metadata, selectedSchema, searchQuery]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        'datasource:tables:pageSize',
+        String(pagination.pageSize),
+      );
+    } catch {
+      // ignore
+    }
+  }, [pagination.pageSize]);
+
   const columnCountByTableId = useMemo(() => {
     const map = new Map<string, number>();
     for (const col of (metadata?.columns ?? []) as Column[]) {
@@ -136,6 +200,22 @@ export default function TablesPage(props: Route.ComponentProps) {
     }));
   }, [filteredTables, columnCountByTableId]);
 
+  const totalCount = tableListItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pagination.pageSize));
+  const page = Math.min(pagination.page, totalPages);
+
+  const pagedItems = useMemo(() => {
+    const start = (page - 1) * pagination.pageSize;
+    return tableListItems.slice(start, start + pagination.pageSize);
+  }, [tableListItems, page, pagination.pageSize]);
+
+  const rangeText = useMemo(() => {
+    if (totalCount === 0) return `0-0 of 0`;
+    const from = (page - 1) * pagination.pageSize + 1;
+    const to = Math.min(page * pagination.pageSize, totalCount);
+    return `${from}-${to} of ${totalCount}`;
+  }, [page, pagination.pageSize, totalCount]);
+
   const basePath = createPath(pathsConfig.app.datasourceTables, slug);
 
   const handleTableClick = useCallback(
@@ -154,6 +234,84 @@ export default function TablesPage(props: Route.ComponentProps) {
         : [...prev, column],
     );
   }, []);
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchQuery(value);
+      setPagination((p) => ({ ...p, page: 1 }));
+    },
+    [setSearchQuery, setPagination],
+  );
+
+  const handleSchemaChange = useCallback(
+    (schemaValue: string) => {
+      setSelectedSchema(schemaValue);
+      setPagination((p) => ({ ...p, page: 1 }));
+    },
+    [setSelectedSchema, setPagination],
+  );
+
+  const openRenameTable = useCallback((table: TableListItem) => {
+    setRenameTableInput(table.tableName);
+    setTableDialog({ kind: 'rename', table });
+  }, []);
+
+  const openTruncateTable = useCallback((table: TableListItem) => {
+    setTableDialog({ kind: 'truncate', table });
+  }, []);
+
+  const openDeleteTable = useCallback((table: TableListItem) => {
+    setTableDialog({ kind: 'delete', table });
+  }, []);
+
+  const confirmRenameTable = useCallback(async () => {
+    if (!tableDialog || tableDialog.kind !== 'rename') return;
+    const { table } = tableDialog;
+    const next = renameTableInput.trim();
+    if (!next || next === table.tableName) return;
+    setIsMutating(true);
+    try {
+      await schemaActions.renameTable(table.schema, table.tableName, next);
+      toast.success(
+        t('datasource.tables.actions.rename.success', {
+          defaultValue: 'Table renamed',
+        }),
+      );
+      setTableDialog(null);
+    } catch (e) {
+      toast.error(getErrorKey(e, t));
+    } finally {
+      setIsMutating(false);
+    }
+  }, [renameTableInput, schemaActions, tableDialog, t]);
+
+  const confirmDestructiveTable = useCallback(async () => {
+    if (!tableDialog || tableDialog.kind === 'rename') return;
+    const { table } = tableDialog;
+    setIsMutating(true);
+    try {
+      if (tableDialog.kind === 'truncate') {
+        await schemaActions.truncateTable(table.schema, table.tableName);
+        toast.success(
+          t('datasource.tables.actions.truncate.success', {
+            defaultValue: 'Table truncated',
+          }),
+        );
+      } else {
+        await schemaActions.dropTable(table.schema, table.tableName);
+        toast.success(
+          t('datasource.tables.actions.delete.success', {
+            defaultValue: 'Table deleted',
+          }),
+        );
+      }
+      setTableDialog(null);
+    } catch (e) {
+      toast.error(getErrorKey(e, t));
+    } finally {
+      setIsMutating(false);
+    }
+  }, [schemaActions, tableDialog, t]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -185,6 +343,11 @@ export default function TablesPage(props: Route.ComponentProps) {
     );
   }
 
+  const renameSubmitEnabled =
+    tableDialog?.kind === 'rename' &&
+    renameTableInput.trim().length > 0 &&
+    renameTableInput.trim() !== tableDialog.table.tableName;
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 flex-col gap-6 px-8 py-6 lg:px-16 lg:py-10">
@@ -205,11 +368,11 @@ export default function TablesPage(props: Route.ComponentProps) {
               })}
               className="h-full flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
             />
             {searchQuery && (
               <button
-                onClick={() => setSearchQuery('')}
+                onClick={() => handleSearchChange('')}
                 className="text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer rounded-full p-1 transition-colors"
               >
                 <X className="h-4 w-4" />
@@ -270,7 +433,7 @@ export default function TablesPage(props: Route.ComponentProps) {
           </div>
 
           {schemas.length > 0 && (
-            <Select value={selectedSchema} onValueChange={setSelectedSchema}>
+            <Select value={selectedSchema} onValueChange={handleSchemaChange}>
               <SelectTrigger className="bg-muted/30 border-border/50 hover:bg-muted flex h-12 w-[180px] items-center gap-3 rounded-xl border px-4 transition-all focus:ring-0 focus-visible:ring-0">
                 <Filter className="text-muted-foreground/60 h-5 w-5 shrink-0" />
                 <SelectValue
@@ -305,15 +468,207 @@ export default function TablesPage(props: Route.ComponentProps) {
         <div className="h-full px-8 py-6 lg:px-16 lg:py-6">
           <DevProfiler id="DatasourceTables/Tables">
             <Tables
-              tables={tableListItems}
+              tables={pagedItems}
               onTableClick={handleTableClick}
+              onRenameTable={openRenameTable}
+              onTruncateTable={openTruncateTable}
+              onDeleteTable={openDeleteTable}
               searchQuery={searchQuery}
               visibleColumns={visibleColumns}
               showSchema={selectedSchema === 'all'}
             />
           </DevProfiler>
+
+          {totalCount > 0 && totalPages > 1 && (
+            <div className="flex w-full items-center justify-between gap-2 pt-3">
+              <div className="flex items-center gap-2">
+                <Label className="whitespace-nowrap">Rows per page:</Label>
+                <Select
+                  onValueChange={(v) =>
+                    setPagination({ page: 1, pageSize: Number(v) })
+                  }
+                  value={String(pagination.pageSize)}
+                >
+                  <SelectTrigger className="h-9 w-[100px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[20, 50, 100, 200].map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground text-sm whitespace-nowrap">
+                  {rangeText}
+                </span>
+
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <Button
+                        aria-label="Go to previous page"
+                        disabled={page === 1}
+                        size="icon"
+                        variant="ghost"
+                        onClick={() =>
+                          setPagination((p) => ({
+                            ...p,
+                            page: Math.max(1, page - 1),
+                          }))
+                        }
+                      >
+                        <ChevronLeftIcon className="h-4 w-4" />
+                      </Button>
+                    </PaginationItem>
+                    <PaginationItem>
+                      <Button
+                        aria-label="Go to next page"
+                        disabled={page * pagination.pageSize >= totalCount}
+                        size="icon"
+                        variant="ghost"
+                        onClick={() =>
+                          setPagination((p) => ({
+                            ...p,
+                            page: Math.min(totalPages, page + 1),
+                          }))
+                        }
+                      >
+                        <ChevronRightIcon className="h-4 w-4" />
+                      </Button>
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      <Dialog
+        open={tableDialog?.kind === 'rename'}
+        onOpenChange={(open) => {
+          if (!open) setTableDialog(null);
+        }}
+      >
+        <DialogContent
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className="sm:max-w-md"
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {t('datasource.tables.dialog.rename.title', {
+                defaultValue: 'Rename table',
+              })}
+            </DialogTitle>
+            <DialogDescription>
+              {t('datasource.tables.dialog.rename.description', {
+                defaultValue: 'Enter a new name for this table.',
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={renameTableInput}
+            onChange={(e) => setRenameTableInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && renameSubmitEnabled && !isMutating) {
+                void confirmRenameTable();
+              }
+            }}
+            placeholder={t('datasource.tables.dialog.rename.placeholder', {
+              defaultValue: 'Table name',
+            })}
+          />
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isMutating}
+              onClick={() => setTableDialog(null)}
+            >
+              {t('common.actions.cancel', { defaultValue: 'Cancel' })}
+            </Button>
+            <Button
+              type="button"
+              disabled={isMutating || !renameSubmitEnabled}
+              onClick={() => void confirmRenameTable()}
+            >
+              {isMutating && tableDialog?.kind === 'rename' ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                t('datasource.tables.dialog.rename.confirm', {
+                  defaultValue: 'Rename',
+                })
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={
+          tableDialog?.kind === 'truncate' || tableDialog?.kind === 'delete'
+        }
+        onOpenChange={(open) => {
+          if (!open) setTableDialog(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {tableDialog?.kind === 'truncate'
+                ? t('datasource.tables.dialog.truncate.title', {
+                    defaultValue: 'Truncate table?',
+                  })
+                : t('datasource.tables.dialog.delete.title', {
+                    defaultValue: 'Delete table?',
+                  })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {tableDialog?.kind === 'truncate'
+                ? t('datasource.tables.dialog.truncate.description', {
+                    defaultValue:
+                      'All rows will be removed. This cannot be undone.',
+                  })
+                : t('datasource.tables.dialog.delete.description', {
+                    defaultValue:
+                      'The table and its data will be permanently removed.',
+                  })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isMutating}>
+              {t('common.actions.cancel', { defaultValue: 'Cancel' })}
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              disabled={isMutating}
+              variant={
+                tableDialog?.kind === 'delete' ? 'destructive' : 'default'
+              }
+              onClick={() => void confirmDestructiveTable()}
+            >
+              {isMutating &&
+              (tableDialog?.kind === 'truncate' ||
+                tableDialog?.kind === 'delete') ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : tableDialog?.kind === 'truncate' ? (
+                t('datasource.tables.dialog.truncate.confirm', {
+                  defaultValue: 'Truncate',
+                })
+              ) : (
+                t('datasource.tables.dialog.delete.confirm', {
+                  defaultValue: 'Delete',
+                })
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, ChevronDown, Check, Plus, X } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronDown,
+  Check,
+  Plus,
+  X,
+  Database,
+} from 'lucide-react';
 
 import {
   Command,
@@ -87,6 +94,9 @@ export function NodeDropdown({
 
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [brokenIcons, setBrokenIcons] = useState<Set<string>>(() => new Set());
+
+  const isIconBroken = (src?: string) => (src ? brokenIcons.has(src) : false);
 
   const filteredItems = useMemo(() => {
     if (!search.trim()) return items;
@@ -197,16 +207,25 @@ export function NodeDropdown({
               'hover:bg-muted/40 focus-visible:ring-ring cursor-pointer transition-colors focus-visible:ring-1 focus-visible:outline-none',
             )}
           >
-            {current.icon && (
-              <img
-                src={current.icon}
-                alt={current.name}
-                className={cn(
-                  'h-4 w-4 shrink-0 rounded object-contain',
-                  shouldInvertIconFromSrc(current.icon) && 'dark:invert',
-                )}
-              />
-            )}
+            {current.icon ? (
+              !isIconBroken(current.icon) ? (
+                <img
+                  src={current.icon}
+                  alt={current.name}
+                  className={cn(
+                    'h-4 w-4 shrink-0 rounded object-contain',
+                    shouldInvertIconFromSrc(current.icon) && 'dark:invert',
+                  )}
+                  onError={() =>
+                    setBrokenIcons((prev) => new Set(prev).add(current.icon!))
+                  }
+                />
+              ) : (
+                <div className="bg-muted/50 text-muted-foreground flex h-4 w-4 shrink-0 items-center justify-center rounded">
+                  <Database className="h-3.5 w-3.5" aria-hidden />
+                </div>
+              )
+            ) : null}
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <BreadcrumbPage className="truncate text-sm font-semibold">
                 {current.name}
@@ -277,17 +296,31 @@ export function NodeDropdown({
                           >
                             <div className="flex min-w-0 flex-1 items-center gap-2.5">
                               {renderIcon?.(item) ??
-                                (item.icon && (
-                                  <img
-                                    src={item.icon}
-                                    alt={item.name}
-                                    className={cn(
-                                      'h-4 w-4 shrink-0 rounded object-contain',
-                                      shouldInvertIconFromSrc(item.icon) &&
-                                        'dark:invert',
-                                    )}
-                                  />
-                                ))}
+                                (item.icon ? (
+                                  !isIconBroken(item.icon) ? (
+                                    <img
+                                      src={item.icon}
+                                      alt={item.name}
+                                      className={cn(
+                                        'h-4 w-4 shrink-0 rounded object-contain',
+                                        shouldInvertIconFromSrc(item.icon) &&
+                                          'dark:invert',
+                                      )}
+                                      onError={() =>
+                                        setBrokenIcons((prev) =>
+                                          new Set(prev).add(item.icon!),
+                                        )
+                                      }
+                                    />
+                                  ) : (
+                                    <div className="bg-muted/50 text-muted-foreground flex h-4 w-4 shrink-0 items-center justify-center rounded">
+                                      <Database
+                                        className="h-3.5 w-3.5"
+                                        aria-hidden
+                                      />
+                                    </div>
+                                  )
+                                ) : null)}
                               <span className="truncate text-sm">
                                 {highlightSearchMatch(item.name, search, {
                                   highlightClassName: 'bg-[#ffcb51]/40',
@@ -329,12 +362,14 @@ export interface GenericBreadcrumbProps {
   nodes: BreadcrumbNodeConfig[];
   loadingLabel?: string;
   noResultsLabel?: string;
+  tailLabel?: string;
 }
 
 export function GenericBreadcrumb({
   nodes,
   loadingLabel,
   noResultsLabel,
+  tailLabel,
 }: GenericBreadcrumbProps) {
   const visibleNodes = nodes.filter((node) => node.current !== null);
 
@@ -346,7 +381,7 @@ export function GenericBreadcrumb({
     <Breadcrumb className="w-fit">
       <BreadcrumbList>
         {visibleNodes.flatMap((node, index) => {
-          const isLast = index === visibleNodes.length - 1;
+          const isLast = index === visibleNodes.length - 1 && !tailLabel;
           return [
             ...(index > 0
               ? [
@@ -365,6 +400,16 @@ export function GenericBreadcrumb({
             </BreadcrumbItem>,
           ];
         })}
+        {tailLabel ? (
+          <>
+            <BreadcrumbSeparator key="sep-tail">
+              <ChevronRight className="h-4 w-4" />
+            </BreadcrumbSeparator>
+            <BreadcrumbItem key="tail">
+              <BreadcrumbPage>{tailLabel}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </>
+        ) : null}
       </BreadcrumbList>
     </Breadcrumb>
   );
@@ -415,6 +460,8 @@ export interface QweryBreadcrumbProps {
   onNewNotebook?: () => void;
   onNewChat?: () => void;
   unsavedNotebookIds?: string[];
+  tailLabel?: string;
+  extraNodes?: BreadcrumbNodeConfig[];
 }
 
 export function QweryBreadcrumb({
@@ -422,6 +469,8 @@ export function QweryBreadcrumb({
   organization,
   project,
   object,
+  tailLabel,
+  extraNodes,
   onOrganizationSelect,
   onProjectSelect,
   onDatasourceSelect,
@@ -533,9 +582,10 @@ export function QweryBreadcrumb({
 
   return (
     <GenericBreadcrumb
-      nodes={nodes}
+      nodes={[...nodes, ...(extraNodes ?? [])]}
       loadingLabel={t('breadcrumb.loading')}
       noResultsLabel={t('breadcrumb.noResults')}
+      tailLabel={tailLabel}
     />
   );
 }

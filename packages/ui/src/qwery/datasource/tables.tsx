@@ -10,8 +10,20 @@ import {
 } from '../../shadcn/table';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
-import { Database, Table2, Info, ArrowRight, Hash, Layers } from 'lucide-react';
+import {
+  Database,
+  MoreHorizontal,
+  Pencil,
+  Scissors,
+  Trash2,
+} from 'lucide-react';
 import { Button } from '../../shadcn/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../shadcn/dropdown-menu';
 
 const VirtuosoTableBody = React.forwardRef<
   HTMLTableSectionElement,
@@ -51,6 +63,9 @@ export const DEFAULT_VISIBLE_TABLE_COLUMNS: TableColumn[] = [
 export interface TablesProps {
   tables: TableListItem[];
   onTableClick?: (table: TableListItem) => void;
+  onRenameTable?: (table: TableListItem) => void;
+  onTruncateTable?: (table: TableListItem) => void;
+  onDeleteTable?: (table: TableListItem) => void;
   className?: string;
   searchQuery?: string;
   visibleColumns?: TableColumn[];
@@ -64,6 +79,9 @@ const MAX_HEIGHT = 800;
 export const Tables = memo(function Tables({
   tables,
   onTableClick,
+  onRenameTable,
+  onTruncateTable,
+  onDeleteTable,
   className,
   searchQuery = '',
   visibleColumns = DEFAULT_VISIBLE_TABLE_COLUMNS,
@@ -137,7 +155,7 @@ export const Tables = memo(function Tables({
   }
 
   const tableHeader = () => (
-    <TableHeader className="bg-muted/50 hover:bg-muted/50">
+    <TableHeader className="bg-background/95 sticky top-0 z-10 border-b backdrop-blur-sm">
       <TableRow className="hover:bg-transparent">
         {isVisible('name') && (
           <TableHead
@@ -145,38 +163,24 @@ export const Tables = memo(function Tables({
               'text-foreground/70 w-[30%] min-w-[200px] py-4 pl-6 font-semibold',
             )}
           >
-            <div className="flex items-center gap-2">
-              <Table2 className="h-4 w-4" />
-              {t('datasource.tables.header.name', {
-                defaultValue: 'Table Name',
-              })}
-            </div>
+            {t('datasource.tables.header.name', { defaultValue: 'Table Name' })}
           </TableHead>
         )}
         {isVisible('description') && (
           <TableHead className="text-foreground/70 w-[40%] min-w-[250px] py-4 font-semibold">
-            <div className="flex items-center gap-2">
-              <Info className="h-4 w-4" />
-              {t('datasource.tables.header.description', {
-                defaultValue: 'Description',
-              })}
-            </div>
+            {t('datasource.tables.header.description', {
+              defaultValue: 'Description',
+            })}
           </TableHead>
         )}
         {isVisible('columns') && (
           <TableHead className="text-foreground/70 w-[100px] py-4 text-right font-semibold">
-            <div className="flex items-center justify-end gap-2">
-              <Layers className="h-4 w-4" />
-              {t('datasource.tables.header.columns', { defaultValue: 'Cols' })}
-            </div>
+            {t('datasource.tables.header.columns', { defaultValue: 'Cols' })}
           </TableHead>
         )}
         {isVisible('rows') && (
           <TableHead className="text-foreground/70 w-[140px] py-4 text-right font-semibold">
-            <div className="flex items-center justify-end gap-2">
-              <Hash className="h-4 w-4" />
-              {t('datasource.tables.header.rows', { defaultValue: 'Rows' })}
-            </div>
+            {t('datasource.tables.header.rows', { defaultValue: 'Rows' })}
           </TableHead>
         )}
         {isVisible('actions') && (
@@ -202,11 +206,8 @@ export const Tables = memo(function Tables({
       {isVisible('name') && (
         <TableCell className="py-3 pl-6">
           <div className="flex items-center gap-3">
-            <div className="bg-muted group-hover:bg-background flex h-10 w-10 items-center justify-center rounded-lg border p-2 transition-colors">
-              <Table2 className="text-muted-foreground group-hover:text-foreground h-5 w-5 transition-colors" />
-            </div>
             <div className="flex min-w-0 flex-col">
-              <span className="truncate text-sm font-semibold">
+              <span className="truncate text-base font-semibold">
                 {highlightMatch(table.tableName, searchQuery)}
               </span>
               {showSchema && (
@@ -220,7 +221,7 @@ export const Tables = memo(function Tables({
       )}
       {isVisible('description') && (
         <TableCell className="py-3">
-          <span className="text-muted-foreground line-clamp-1 max-w-md text-sm">
+          <span className="text-muted-foreground line-clamp-1 max-w-md text-base">
             {table.description || (
               <span className="text-muted-foreground/30 italic">
                 {t('datasource.tables.noDescription', {
@@ -233,37 +234,79 @@ export const Tables = memo(function Tables({
       )}
       {isVisible('columns') && (
         <TableCell className="py-3 text-right">
-          <span className="text-sm font-medium">{table.numberOfColumns}</span>
+          <span className="text-base font-medium">{table.numberOfColumns}</span>
         </TableCell>
       )}
       {isVisible('rows') && (
         <TableCell className="py-3 text-right">
           <div className="flex flex-col items-end">
-            <span className="text-sm font-semibold">
+            <span className="text-base font-semibold">
               {formatNumber(table.rowsEstimated)}
-              <span className="text-muted-foreground/40 ml-1 text-[10px] font-normal uppercase">
-                {t('datasource.tables.rows.suffix', { defaultValue: 'rows' })}
-              </span>
             </span>
           </div>
         </TableCell>
       )}
       {isVisible('actions') && (
         <TableCell className="py-3 pr-6 text-right">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
-          >
-            <ArrowRight className="h-4 w-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreHorizontal className="h-4 w-4" aria-hidden />
+                <span className="sr-only">
+                  {t('datasource.tables.actions.open', {
+                    defaultValue: 'Open table actions',
+                  })}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <DropdownMenuItem
+                disabled={!onRenameTable}
+                onClick={() => onRenameTable?.(table)}
+              >
+                <Pencil className="mr-2 h-4 w-4" aria-hidden />
+                {t('datasource.tables.actions.rename', {
+                  defaultValue: 'Rename',
+                })}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!onTruncateTable}
+                onClick={() => onTruncateTable?.(table)}
+              >
+                <Scissors className="mr-2 h-4 w-4" aria-hidden />
+                {t('datasource.tables.actions.truncate', {
+                  defaultValue: 'Truncate',
+                })}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive dark:text-red-300 dark:focus:text-red-300"
+                disabled={!onDeleteTable}
+                onClick={() => onDeleteTable?.(table)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" aria-hidden />
+                {t('datasource.tables.actions.delete', {
+                  defaultValue: 'Delete',
+                })}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </TableCell>
       )}
     </TableRow>
   );
 
   const containerClasses = cn(
-    'bg-card border-border/50 overflow-hidden rounded-xl border shadow-sm',
+    // NOTE: avoid overflow-hidden here; it breaks sticky headers when the page scroll container is outside.
+    'bg-card border-border/50 relative mb-6 overflow-visible rounded-xl border shadow-sm',
     className,
   );
 

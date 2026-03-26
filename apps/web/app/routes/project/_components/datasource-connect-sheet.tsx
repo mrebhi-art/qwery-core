@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Datasource } from '@qwery/domain/entities';
 import type { DatasourcePreviewRef } from './datasource-preview';
 
-import { Check, Pencil, Shuffle, X } from 'lucide-react';
+import { Check, Database, Pencil, Shuffle, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle } from '@qwery/ui/sheet';
 import { Button } from '@qwery/ui/button';
 import { Input } from '@qwery/ui/input';
@@ -66,6 +66,7 @@ export function DatasourceConnectSheet({
 }: DatasourceConnectSheetProps) {
   const actionsRef = useRef<HTMLDivElement | null>(null);
   const [actionsReady, setActionsReady] = useState(false);
+  const [iconFailed, setIconFailed] = useState(false);
 
   const [datasourceName, setDatasourceName] = useState(
     () => existingDatasource?.name ?? generateRandomName(),
@@ -211,14 +212,28 @@ export function DatasourceConnectSheet({
           >
             <div className="flex min-w-0 items-center gap-4">
               <div className="bg-muted/30 flex h-20 w-20 shrink-0 items-center justify-center rounded-xl">
-                {extensionMeta.icon && (
-                  <img
-                    src={extensionMeta.icon}
-                    alt={extensionMeta.name}
-                    className={cn(
-                      'h-16 w-16 object-contain',
-                      shouldInvertDatasourceIcon(extensionId) && 'dark:invert',
-                    )}
+                {extensionMeta.icon ? (
+                  !iconFailed ? (
+                    <img
+                      src={extensionMeta.icon}
+                      alt={extensionMeta.name}
+                      className={cn(
+                        'h-16 w-16 object-contain',
+                        shouldInvertDatasourceIcon(extensionId) &&
+                          'dark:invert',
+                      )}
+                      onError={() => setIconFailed(true)}
+                    />
+                  ) : (
+                    <Database
+                      className="text-muted-foreground/60 h-10 w-10"
+                      aria-hidden
+                    />
+                  )
+                ) : (
+                  <Database
+                    className="text-muted-foreground/60 h-10 w-10"
+                    aria-hidden
                   />
                 )}
               </div>
@@ -382,7 +397,7 @@ export function DatasourceConnectSheet({
         open={showExitConfirmation}
         onOpenChange={setShowExitConfirmation}
       >
-        <AlertDialogContent className="z-[110]" overlayClassName="z-[110]">
+        <AlertDialogContent className="z-110" overlayClassName="z-110">
           <AlertDialogHeader>
             <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
             <AlertDialogDescription>

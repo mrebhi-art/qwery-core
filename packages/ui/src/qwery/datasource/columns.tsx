@@ -9,7 +9,14 @@ import {
 } from '../../shadcn/table';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
-import { Type, Columns2, Info } from 'lucide-react';
+import { Columns2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Button } from '../../shadcn/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../shadcn/dropdown-menu';
 
 export interface ColumnListItem {
   name: string;
@@ -18,13 +25,14 @@ export interface ColumnListItem {
   format: string;
 }
 
-export type ColumnColumn = 'name' | 'description' | 'type';
+export type ColumnColumn = 'name' | 'description' | 'type' | 'actions';
 
 /** All column-detail table keys, in default display order. */
 export const ALL_COLUMN_COLUMNS = [
   'name',
   'description',
   'type',
+  'actions',
 ] as const satisfies readonly ColumnColumn[];
 
 export const DEFAULT_VISIBLE_COLUMN_COLUMNS: ColumnColumn[] = [
@@ -34,6 +42,8 @@ export const DEFAULT_VISIBLE_COLUMN_COLUMNS: ColumnColumn[] = [
 export interface ColumnsProps {
   columns: ColumnListItem[];
   onColumnClick?: (column: ColumnListItem) => void;
+  onRenameColumn?: (column: ColumnListItem) => void;
+  onDeleteColumn?: (column: ColumnListItem) => void;
   className?: string;
   searchQuery?: string;
   visibleColumns?: ColumnColumn[];
@@ -42,6 +52,8 @@ export interface ColumnsProps {
 export function Columns({
   columns,
   onColumnClick,
+  onRenameColumn,
+  onDeleteColumn,
   className,
   searchQuery = '',
   visibleColumns = DEFAULT_VISIBLE_COLUMN_COLUMNS,
@@ -103,12 +115,12 @@ export function Columns({
   return (
     <div
       className={cn(
-        'bg-card border-border/50 overflow-hidden rounded-xl border shadow-sm',
+        'bg-card border-border/50 relative mb-6 overflow-visible rounded-xl border shadow-sm',
         className,
       )}
     >
       <Table>
-        <TableHeader className="bg-muted/50 hover:bg-muted/50">
+        <TableHeader className="bg-background/95 sticky top-0 z-10 border-b backdrop-blur-sm">
           <TableRow className="hover:bg-transparent">
             {isVisible('name') && (
               <TableHead
@@ -117,32 +129,30 @@ export function Columns({
                   isVisible('description') ? 'w-[35%]' : 'w-full',
                 )}
               >
-                <div className="flex items-center gap-2">
-                  <Columns2 className="h-4 w-4" />
-                  {t('datasource.columns.header.name', {
-                    defaultValue: 'Column Name',
-                  })}
-                </div>
+                {t('datasource.columns.header.name', {
+                  defaultValue: 'Column Name',
+                })}
               </TableHead>
             )}
             {isVisible('description') && (
               <TableHead className="text-foreground/70 py-4 font-semibold">
-                <div className="flex items-center gap-2">
-                  <Info className="h-4 w-4" />
-                  {t('datasource.columns.header.description', {
-                    defaultValue: 'Description',
-                  })}
-                </div>
+                {t('datasource.columns.header.description', {
+                  defaultValue: 'Description',
+                })}
               </TableHead>
             )}
             {isVisible('type') && (
               <TableHead className="text-foreground/70 w-[20%] py-4 pr-6 text-right font-semibold">
-                <div className="flex items-center justify-end gap-2">
-                  <Type className="h-4 w-4" />
-                  {t('datasource.columns.header.dataType', {
-                    defaultValue: 'Type & Format',
-                  })}
-                </div>
+                {t('datasource.columns.header.dataType', {
+                  defaultValue: 'Type & Format',
+                })}
+              </TableHead>
+            )}
+            {isVisible('actions') && (
+              <TableHead className="text-foreground/70 w-[80px] py-4 pr-6 text-right font-semibold">
+                {t('datasource.columns.header.actions', {
+                  defaultValue: 'Actions',
+                })}
               </TableHead>
             )}
           </TableRow>
@@ -159,13 +169,13 @@ export function Columns({
               data-test={`column-row-${column.name}`}
             >
               {isVisible('name') && (
-                <TableCell className="py-3 pl-6 text-sm font-semibold">
+                <TableCell className="py-3 pl-6 text-base font-semibold">
                   {highlightMatch(column.name, searchQuery)}
                 </TableCell>
               )}
               {isVisible('description') && (
                 <TableCell className="py-3">
-                  <span className="text-muted-foreground line-clamp-1 text-sm">
+                  <span className="text-muted-foreground line-clamp-1 text-base">
                     {column.description || (
                       <span className="text-muted-foreground/30 italic">
                         {t('datasource.columns.noDescription', {
@@ -180,13 +190,7 @@ export function Columns({
                 <TableCell className="py-3 pr-6">
                   <div className="flex flex-col items-end gap-1">
                     <div className="flex w-full items-center justify-end gap-1.5">
-                      <div
-                        className="text-muted-foreground/40 scale-90"
-                        aria-hidden
-                      >
-                        <Type className="h-3.5 w-3.5" />
-                      </div>
-                      <code className="text-foreground bg-muted/60 border-border/50 rounded border px-1.5 py-0.5 font-mono text-xs font-medium">
+                      <code className="text-foreground bg-muted/60 border-border/50 rounded border px-1.5 py-0.5 font-mono text-sm font-medium">
                         {column.dataType}
                       </code>
                     </div>
@@ -198,6 +202,52 @@ export function Columns({
                         </span>
                       )}
                   </div>
+                </TableCell>
+              )}
+              {isVisible('actions') && (
+                <TableCell className="py-3 pr-6 text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreHorizontal className="h-4 w-4" aria-hidden />
+                        <span className="sr-only">
+                          {t('datasource.columns.actions.open', {
+                            defaultValue: 'Open column actions',
+                          })}
+                        </span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <DropdownMenuItem
+                        disabled={!onRenameColumn}
+                        onClick={() => onRenameColumn?.(column)}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" aria-hidden />
+                        {t('datasource.columns.actions.rename', {
+                          defaultValue: 'Rename',
+                        })}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive dark:text-red-300 dark:focus:text-red-300"
+                        disabled={!onDeleteColumn}
+                        onClick={() => onDeleteColumn?.(column)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" aria-hidden />
+                        {t('datasource.columns.actions.delete', {
+                          defaultValue: 'Delete',
+                        })}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               )}
             </TableRow>

@@ -149,9 +149,8 @@ describe('CreateMessageService', () => {
     expect(result.createdAt).toBeInstanceOf(Date);
     expect(result.updatedAt).toBeInstanceOf(Date);
 
-    const updatedConversation = await conversationRepository.findById(
-      conversationId,
-    );
+    const updatedConversation =
+      await conversationRepository.findById(conversationId);
     expect(updatedConversation?.updatedAt.getTime()).toBe(
       result.updatedAt.getTime(),
     );

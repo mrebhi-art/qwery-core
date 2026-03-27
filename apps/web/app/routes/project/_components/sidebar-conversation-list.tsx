@@ -124,10 +124,8 @@ export function SidebarConversationHistory({
     prevSidebarStateRef.current = sidebarState;
   }, [sidebarState]);
 
-  const {
-    bookmarkedIds,
-    toggleBookmark: storeToggleBookmark,
-  } = useConversationListPrefsStore();
+  const { bookmarkedIds, toggleBookmark: storeToggleBookmark } =
+    useConversationListPrefsStore();
   const bookmarkedIdsSet = useMemo(
     () => new Set(bookmarkedIds),
     [bookmarkedIds],

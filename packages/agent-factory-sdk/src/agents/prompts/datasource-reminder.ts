@@ -12,7 +12,10 @@ export function buildDatasourceReminder(
   if (attachedDatasourceNames.length > 0) {
     const list = attachedDatasourceNames.join(', ');
     return wrapped(
-      `The following datasources are currently attached to this conversation: ${list}. Use getSchema with detailLevel "simple" to discover tables and columns with low token usage. Use detailLevel "full" only when needed, then runQuery to query.`,
+      `The following datasources are currently attached: ${list}. ` +
+        `To answer data questions: use search_ontology to find relevant datasets, ` +
+        `get_relationships to discover joins, then write SQL and call runQuery. ` +
+        `Use getSchema with detailLevel="simple" for a full dataset overview.`,
     );
   }
 

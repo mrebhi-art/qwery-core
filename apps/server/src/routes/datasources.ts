@@ -16,6 +16,7 @@ import {
   createValidationErrorResponse,
 } from '../lib/http-utils';
 import { Code } from '@qwery/domain/common';
+<<<<<<< Updated upstream
 import { fetchWithSsrfProtection, SsrfBlockedError } from '../lib/ssrf-guard';
 import { checkRateLimit } from '../lib/rate-limit';
 
@@ -84,6 +85,10 @@ const validateUrlBodySchema = z.object({
 const proxyJsonBodySchema = z.object({
   url: z.string().url().min(1),
 });
+=======
+import { onDatasourceAttach } from '@qwery/semantic-layer/on-attach';
+import { getLogger } from '@qwery/shared/logger';
+>>>>>>> Stashed changes
 
 export function createDatasourcesRoutes(
   getRepositories: () => Promise<Repositories>,
@@ -348,6 +353,17 @@ export function createDatasourcesRoutes(
       const body = await c.req.json();
       const useCase = new CreateDatasourceService(repos.datasource);
       const datasource = await useCase.execute(body);
+
+      // Trigger schema discovery asynchronously — non-blocking
+      onDatasourceAttach(datasource, repos.datasource).catch((err: unknown) => {
+        getLogger().then((logger) =>
+          logger.warn(
+            { err, datasourceId: datasource.id },
+            'semantic-layer: background discovery error',
+          ),
+        );
+      });
+
       return c.json(datasource, 201);
     } catch (error) {
       return handleDomainException(error);

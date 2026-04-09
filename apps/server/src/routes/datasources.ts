@@ -16,9 +16,10 @@ import {
   createValidationErrorResponse,
 } from '../lib/http-utils';
 import { Code } from '@qwery/domain/common';
-<<<<<<< Updated upstream
 import { fetchWithSsrfProtection, SsrfBlockedError } from '../lib/ssrf-guard';
 import { checkRateLimit } from '../lib/rate-limit';
+import { onDatasourceAttach } from '@qwery/semantic-layer/on-attach';
+import { getLogger } from '@qwery/shared/logger';
 
 const VALIDATE_URL_TIMEOUT_MS = 15_000;
 const VALIDATE_URL_MAX_BYTES = 5 * 1024 * 1024;
@@ -85,10 +86,6 @@ const validateUrlBodySchema = z.object({
 const proxyJsonBodySchema = z.object({
   url: z.string().url().min(1),
 });
-=======
-import { onDatasourceAttach } from '@qwery/semantic-layer/on-attach';
-import { getLogger } from '@qwery/shared/logger';
->>>>>>> Stashed changes
 
 export function createDatasourcesRoutes(
   getRepositories: () => Promise<Repositories>,

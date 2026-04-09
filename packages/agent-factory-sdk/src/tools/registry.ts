@@ -374,38 +374,10 @@ export const Registry = {
         throw new Error(`Agent not found: ${agentId}`);
       }
 
-<<<<<<< Updated upstream
-      const allTools = Array.from(tools.values());
-      const options = agent.options ?? {};
-      const toolsMap = options.tools as Record<string, boolean> | undefined;
-      const toolIds = options.toolIds as string[] | undefined;
-      const toolDenylist = options.toolDenylist as string[] | undefined;
-
-      let allowlist: string[] | undefined;
-      if (toolsMap && toolsMap['*'] === false) {
-        allowlist = Object.entries(toolsMap)
-          .filter(([k, v]) => k !== '*' && v === true)
-          .map(([k]) => k);
-      } else if (toolIds?.length) {
-        allowlist = toolIds;
-      }
-
-      let byAgent =
-        allowlist != null
-          ? allTools.filter((t) => allowlist!.includes(t.id))
-          : allTools;
-      if (toolDenylist?.length) {
-        byAgent = byAgent.filter((t) => !toolDenylist.includes(t.id));
-      }
+      let filtered = filterToolsForAgent(agent, model);
       if (forAgentOptions?.webSearch === false) {
-        byAgent = byAgent.filter((t) => t.id !== 'webfetch');
+        filtered = filtered.filter((t) => t.id !== 'webfetch');
       }
-      const byModel = byAgent.filter((t) => whenModelMatches(t, model));
-
-      const result: Record<string, Tool> = {};
-=======
-      const filtered = filterToolsForAgent(agent, model);
->>>>>>> Stashed changes
       const initCtx = { agent: { id: agentId } };
 
       const result: Record<string, Tool> = {};

@@ -161,63 +161,12 @@ export const GetSchemaTool = Tool.define('getSchema', {
           if (detail?.fields) lines.push(formatFields(detail.fields));
         }
 
-<<<<<<< Updated upstream
-            const extension = ExtensionsRegistry.get(
-              datasource.datasource_provider,
-            ) as DatasourceExtension | undefined;
-            if (!extension?.drivers?.length) {
-              return {
-                datasourceId,
-                datasourceDisplayName,
-                error: `No driver for provider: ${datasource.datasource_provider}`,
-              };
-            }
-
-            const nodeDriver =
-              extension.drivers.find((d) => d.runtime === 'node') ??
-              extension.drivers[0];
-            if (!nodeDriver) {
-              return {
-                datasourceId,
-                datasourceDisplayName,
-                error: `No node driver for provider: ${datasource.datasource_provider}`,
-              };
-            }
-
-            const instance = await getDriverInstance(nodeDriver, {
-              config: normalizeDatasourceConfig(datasource.config),
-            });
-
-            const metadata = await instance.metadata();
-            if (typeof instance.close === 'function') {
-              const closeResult = instance.close();
-              if (
-                closeResult &&
-                typeof (closeResult as Promise<unknown>).catch === 'function'
-              ) {
-                void (closeResult as Promise<unknown>).catch(() => {});
-              }
-            }
-            return {
-              datasourceId,
-              datasource,
-              datasourceDisplayName,
-              metadata,
-            };
-          } catch (err) {
-            return {
-              datasourceId,
-              datasourceDisplayName,
-              error: err instanceof Error ? err.message : String(err),
-            };
-=======
         if (relationships.length > 0) {
           lines.push('\n### Relationships');
           for (const r of relationships) {
             lines.push(
               `- ${r.fromDataset}.${r.fromColumns.join(',')} → ${r.toDataset}.${r.toColumns.join(',')} (${r.name})`,
             );
->>>>>>> Stashed changes
           }
         }
 

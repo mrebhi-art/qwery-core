@@ -9,7 +9,10 @@ export function buildPlannerPrompt(
   const datasetSection =
     relevantDatasetDetails.length > 0
       ? relevantDatasetDetails
-          .map((d) => `### ${d.name} (${d.source})\n${d.description}\n\`\`\`yaml\n${d.yaml}\n\`\`\``)
+          .map(
+            (d) =>
+              `### ${d.name} (${d.source})\n${d.description}\n\`\`\`yaml\n${d.yaml}\n\`\`\``,
+          )
           .join('\n\n')
       : relevantDatasets.length > 0
         ? `Available datasets: ${relevantDatasets.join(', ')}`

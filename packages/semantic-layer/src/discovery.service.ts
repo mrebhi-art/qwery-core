@@ -2,19 +2,12 @@ import type {
   IDataSourceDriver,
   DatasourceExtension,
 } from '@qwery/extensions-sdk';
-import {
-  ExtensionsRegistry,
-  ExtensionScope,
-} from '@qwery/extensions-sdk';
+import { ExtensionsRegistry, ExtensionScope } from '@qwery/extensions-sdk';
 import { getDriverInstance } from '@qwery/extensions-loader';
 import { getLogger } from '@qwery/shared/logger';
 
 import { adaptMetadataToDiscoveredSchema } from './adapters/metadata.adapter';
-import type {
-  ColumnStats,
-  DiscoveredSchema,
-  SampleData,
-} from './types';
+import type { ColumnStats, DiscoveredSchema, SampleData } from './types';
 
 export class DiscoveryService {
   async discoverSchema(

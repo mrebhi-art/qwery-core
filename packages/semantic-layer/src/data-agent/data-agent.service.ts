@@ -23,7 +23,13 @@ export class DataAgentService {
     datasourceRepo: IDatasourceRepository,
   ): Promise<void> {
     const logger = await getLogger();
-    const { datasourceId, userQuestion, conversationContext = '', clarificationRound = 0, onEvent } = params;
+    const {
+      datasourceId,
+      userQuestion,
+      conversationContext = '',
+      clarificationRound = 0,
+      onEvent,
+    } = params;
 
     onEvent({ type: 'message_start', startedAt: Date.now() });
 
@@ -36,7 +42,9 @@ export class DataAgentService {
       const datasource = await datasourceRepo.findById(datasourceId);
       if (!datasource) throw new Error(`Datasource ${datasourceId} not found`);
 
-      const revealedConfig = await datasourceRepo.revealSecrets(datasource.config);
+      const revealedConfig = await datasourceRepo.revealSecrets(
+        datasource.config,
+      );
       const driverId = datasource.datasource_driver;
       const databaseType = getDialectFromDriverId(driverId);
 
@@ -44,17 +52,28 @@ export class DataAgentService {
       const vectorSearchStart = Date.now();
       const embeddingDurationMs = vectorSearchStart - embeddingStart;
 
-      const similarDatasets = await neoOntologyService.searchSimilar(datasourceId, userQuestion, 10);
+      const similarDatasets = await neoOntologyService.searchSimilar(
+        datasourceId,
+        userQuestion,
+        10,
+      );
       const vectorSearchDurationMs = Date.now() - vectorSearchStart;
 
       const relevantDatasets = similarDatasets.map((d) => d.name);
-      const matchedDatasets = similarDatasets.map((d) => ({ name: d.name, score: d.score }));
+      const matchedDatasets = similarDatasets.map((d) => ({
+        name: d.name,
+        score: d.score,
+      }));
 
       // ── Pre-fetch dataset YAML details ─────────────────────────────────────
       const yamlStart = Date.now();
-      const rawDetails = relevantDatasets.length > 0
-        ? await neoOntologyService.getDatasetDetails(datasourceId, relevantDatasets)
-        : [];
+      const rawDetails =
+        relevantDatasets.length > 0
+          ? await neoOntologyService.getDatasetDetails(
+              datasourceId,
+              relevantDatasets,
+            )
+          : [];
 
       const relevantDatasetDetails = rawDetails.map((d) => ({
         name: d.name,
@@ -119,13 +138,18 @@ export class DataAgentService {
       let finalStatus: 'clarification_needed' | undefined;
 
       // Determine if we ended with a clarification request
-      if (finalState.plan?.shouldClarify && finalState.plan.clarificationQuestions.length > 0) {
+      if (
+        finalState.plan?.shouldClarify &&
+        finalState.plan.clarificationQuestions.length > 0
+      ) {
         finalStatus = 'clarification_needed';
         onEvent({
           type: 'clarification_requested',
           questions: finalState.plan.clarificationQuestions,
         });
-        finalContent = finalState.plan.clarificationQuestions.map((q) => q.question).join('\n');
+        finalContent = finalState.plan.clarificationQuestions
+          .map((q) => q.question)
+          .join('\n');
       } else {
         finalContent = finalState.explainerOutput?.narrative ?? '';
       }

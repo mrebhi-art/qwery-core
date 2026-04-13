@@ -1,8 +1,5 @@
 export { DiscoveryService, discoveryService } from './discovery.service';
-export {
-  onDatasourceAttach,
-  getDiscoveryStatus,
-} from './on-datasource-attach';
+export { onDatasourceAttach, getDiscoveryStatus } from './on-datasource-attach';
 export {
   loadDiscoveryRecord,
   saveDiscoveryRecord,

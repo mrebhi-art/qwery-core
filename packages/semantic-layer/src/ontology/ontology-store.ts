@@ -22,12 +22,20 @@ export interface OntologyRecord {
   error: string | null;
 }
 
-export async function saveOntologyRecord(record: OntologyRecord): Promise<void> {
+export async function saveOntologyRecord(
+  record: OntologyRecord,
+): Promise<void> {
   await mkdir(getStoreDir(), { recursive: true });
-  await writeFile(ontologyPath(record.datasourceId), JSON.stringify(record, null, 2), 'utf-8');
+  await writeFile(
+    ontologyPath(record.datasourceId),
+    JSON.stringify(record, null, 2),
+    'utf-8',
+  );
 }
 
-export async function loadOntologyRecord(datasourceId: string): Promise<OntologyRecord | null> {
+export async function loadOntologyRecord(
+  datasourceId: string,
+): Promise<OntologyRecord | null> {
   try {
     const raw = await readFile(ontologyPath(datasourceId), 'utf-8');
     return JSON.parse(raw) as OntologyRecord;

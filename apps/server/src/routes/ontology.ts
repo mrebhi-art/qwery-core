@@ -5,7 +5,9 @@ import { getDiscoveryStatus } from '@qwery/semantic-layer/on-attach';
 import { handleDomainException } from '../lib/http-utils';
 import type { Repositories } from '@qwery/domain/repositories';
 
-export function createOntologyRoutes(getRepositories: () => Promise<Repositories>) {
+export function createOntologyRoutes(
+  getRepositories: () => Promise<Repositories>,
+) {
   const app = new Hono();
 
   // GET /api/datasources/:id/semantic-model — get stored OSI semantic model
@@ -13,7 +15,11 @@ export function createOntologyRoutes(getRepositories: () => Promise<Repositories
     try {
       const id = c.req.param('id');
       const model = await semanticModelService.getModel(id);
-      if (!model) return c.json({ error: 'No semantic model found for this datasource' }, 404);
+      if (!model)
+        return c.json(
+          { error: 'No semantic model found for this datasource' },
+          404,
+        );
       return c.json(model);
     } catch (error) {
       return handleDomainException(error);
@@ -72,7 +78,10 @@ export function createOntologyRoutes(getRepositories: () => Promise<Repositories
   app.post('/:id/ontology/search', async (c) => {
     try {
       const id = c.req.param('id');
-      const { query, topK = 5 } = await c.req.json<{ query: string; topK?: number }>();
+      const { query, topK = 5 } = await c.req.json<{
+        query: string;
+        topK?: number;
+      }>();
       if (!query) return c.json({ error: 'query is required' }, 400);
       const results = await ontologyService.searchDatasets(id, query, topK);
       return c.json(results);
@@ -87,7 +96,12 @@ export function createOntologyRoutes(getRepositories: () => Promise<Repositories
       const id = c.req.param('id');
       const record = await getDiscoveryStatus(id);
       if (!record) return c.json({ status: 'not_started' }, 200);
-      return c.json({ datasourceId: record.datasourceId, status: record.status, updatedAt: record.updatedAt, error: record.error });
+      return c.json({
+        datasourceId: record.datasourceId,
+        status: record.status,
+        updatedAt: record.updatedAt,
+        error: record.error,
+      });
     } catch (error) {
       return handleDomainException(error);
     }
@@ -113,17 +127,27 @@ export function createOntologyRoutes(getRepositories: () => Promise<Repositories
       // Guard: already running
       const currentStatus = await semanticModelService.getStatus(id);
       if (currentStatus?.status === 'running') {
-        return c.json({ error: 'Semantic model generation already in progress' }, 409);
+        return c.json(
+          { error: 'Semantic model generation already in progress' },
+          409,
+        );
       }
 
       const repos = await getRepositories();
       const datasource = await repos.datasource.findById(id);
       if (!datasource) return c.json({ error: 'Datasource not found' }, 404);
-      const revealedConfig = await repos.datasource.revealSecrets(datasource.config);
+      const revealedConfig = await repos.datasource.revealSecrets(
+        datasource.config,
+      );
 
       // Fire-and-forget: Stage 2 → Stage 3
       semanticModelService
-        .generateModel(id, datasource.name ?? datasource.datasource_driver, datasource.datasource_driver, revealedConfig)
+        .generateModel(
+          id,
+          datasource.name ?? datasource.datasource_driver,
+          datasource.datasource_driver,
+          revealedConfig,
+        )
         .then(() => ontologyService.buildOntology(id).catch(() => {}))
         .catch(() => {});
 

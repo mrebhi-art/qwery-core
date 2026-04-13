@@ -2,7 +2,10 @@ import type { PlanArtifact } from '../../types';
 
 export function buildNavigatorPrompt(plan: PlanArtifact): string {
   const stepsSummary = plan.steps
-    .map((s) => `  Step ${s.id}: ${s.description} — datasets: [${s.datasets.join(', ')}]`)
+    .map(
+      (s) =>
+        `  Step ${s.id}: ${s.description} — datasets: [${s.datasets.join(', ')}]`,
+    )
     .join('\n');
 
   return `You are the Navigator node of a data analytics agent. Your job is to explore the ontology and build a complete join map for the SQL builder.

@@ -56,15 +56,25 @@ export async function loadAndFormatDatasources(
   datasourceRepo: Repositories['datasource'],
 ): Promise<{
   datasources: Datasource[];
-  reminderContext: { attachedDatasourceNames: string[] };
+  reminderContext: {
+    attachedDatasources: Array<{
+      id: string;
+      name: string;
+      provider: string;
+      driver: string;
+    }>;
+  };
 }> {
   const datasources = await loadDatasources(datasourceIds, datasourceRepo);
   return {
     datasources,
     reminderContext: {
-      attachedDatasourceNames: datasources.map(
-        (d: Datasource) => `${d.name} (datasourceId: ${d.id})`,
-      ),
+      attachedDatasources: datasources.map((d: Datasource) => ({
+        id: d.id,
+        name: d.name,
+        provider: d.datasource_provider,
+        driver: d.datasource_driver,
+      })),
     },
   };
 }

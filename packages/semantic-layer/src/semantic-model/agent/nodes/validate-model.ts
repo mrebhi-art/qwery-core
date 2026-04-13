@@ -1,4 +1,8 @@
-import type { OSIDataset, OSIRelationship, OSISemanticModel } from '../../../osi/types';
+import type {
+  OSIDataset,
+  OSIRelationship,
+  OSISemanticModel,
+} from '../../../osi/types';
 import type { AgentStateType } from '../state';
 
 function autoFix(model: OSISemanticModel): OSISemanticModel {
@@ -29,13 +33,16 @@ function autoFix(model: OSISemanticModel): OSISemanticModel {
       {
         ...def,
         datasets: fixedDatasets,
-        relationships: validRelationships.length > 0 ? validRelationships : undefined,
+        relationships:
+          validRelationships.length > 0 ? validRelationships : undefined,
       },
     ],
   };
 }
 
-export async function validateModelNode(state: AgentStateType): Promise<Partial<AgentStateType>> {
+export async function validateModelNode(
+  state: AgentStateType,
+): Promise<Partial<AgentStateType>> {
   const { semanticModel } = state;
   if (!semanticModel) return {};
 

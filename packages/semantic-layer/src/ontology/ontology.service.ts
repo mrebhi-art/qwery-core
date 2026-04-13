@@ -22,12 +22,20 @@ export class OntologyService {
     try {
       const osiRecord = await loadOsiModel(datasourceId);
       if (!osiRecord?.model) {
-        throw new Error(`No semantic model found for datasource ${datasourceId}. Run Stage 2 first.`);
+        throw new Error(
+          `No semantic model found for datasource ${datasourceId}. Run Stage 2 first.`,
+        );
       }
 
-      logger.info({ datasourceId }, 'semantic-layer: building Neo4j ontology graph');
+      logger.info(
+        { datasourceId },
+        'semantic-layer: building Neo4j ontology graph',
+      );
 
-      const stats = await neoOntologyService.createGraph(datasourceId, osiRecord.model);
+      const stats = await neoOntologyService.createGraph(
+        datasourceId,
+        osiRecord.model,
+      );
 
       const record: OntologyRecord = {
         datasourceId,
@@ -49,7 +57,10 @@ export class OntologyService {
       return record;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.warn({ datasourceId, err }, 'semantic-layer: ontology build failed');
+      logger.warn(
+        { datasourceId, err },
+        'semantic-layer: ontology build failed',
+      );
 
       const record: OntologyRecord = {
         datasourceId,
@@ -66,7 +77,9 @@ export class OntologyService {
     }
   }
 
-  async getOntologyStatus(datasourceId: string): Promise<OntologyRecord | null> {
+  async getOntologyStatus(
+    datasourceId: string,
+  ): Promise<OntologyRecord | null> {
     return loadOntologyRecord(datasourceId);
   }
 

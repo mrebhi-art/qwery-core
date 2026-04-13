@@ -7,9 +7,19 @@ import { extractJsonFromText } from '../../../llm';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import type { DataAgentTracer } from '../tracer';
 
-export function createPlannerNode(structuredLlm: ChatModel, emit: EmitFn, tracer: DataAgentTracer) {
-  return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
-    emit({ type: 'phase_start', phase: 'planner', description: 'Analyzing question and creating execution plan' });
+export function createPlannerNode(
+  structuredLlm: ChatModel,
+  emit: EmitFn,
+  tracer: DataAgentTracer,
+) {
+  return async (
+    state: DataAgentStateType,
+  ): Promise<Partial<DataAgentStateType>> => {
+    emit({
+      type: 'phase_start',
+      phase: 'planner',
+      description: 'Analyzing question and creating execution plan',
+    });
 
     const systemPrompt = buildPlannerPrompt(
       state.conversationContext,
@@ -18,10 +28,13 @@ export function createPlannerNode(structuredLlm: ChatModel, emit: EmitFn, tracer
       state.clarificationRound,
     );
 
-    const llmWithOutput = structuredLlm.withStructuredOutput(PlanArtifactSchema, {
-      name: 'create_plan',
-      includeRaw: true,
-    });
+    const llmWithOutput = structuredLlm.withStructuredOutput(
+      PlanArtifactSchema,
+      {
+        name: 'create_plan',
+        includeRaw: true,
+      },
+    );
 
     let plan: PlanArtifact | undefined;
     let promptTokens = 0;
@@ -36,7 +49,12 @@ export function createPlannerNode(structuredLlm: ChatModel, emit: EmitFn, tracer
         ]),
       );
 
-      const parsed = raw as { parsed: PlanArtifact; raw: { usage_metadata?: { input_tokens?: number; output_tokens?: number } } };
+      const parsed = raw as {
+        parsed: PlanArtifact;
+        raw: {
+          usage_metadata?: { input_tokens?: number; output_tokens?: number };
+        };
+      };
       plan = parsed.parsed;
 
       const usage = parsed.raw?.usage_metadata;
@@ -50,14 +68,23 @@ export function createPlannerNode(structuredLlm: ChatModel, emit: EmitFn, tracer
     if (!plan) {
       try {
         const plainPrompt = `${systemPrompt}\n\nReturn ONLY a valid JSON object matching the plan schema. No markdown fences, no explanation.`;
-        const response = await tracer.trace('planner', 'plan_generation', false, () =>
-          structuredLlm.invoke([
-            new SystemMessage(plainPrompt),
-            new HumanMessage(state.userQuestion),
-          ]),
+        const response = await tracer.trace(
+          'planner',
+          'plan_generation',
+          false,
+          () =>
+            structuredLlm.invoke([
+              new SystemMessage(plainPrompt),
+              new HumanMessage(state.userQuestion),
+            ]),
         );
-        const text = typeof response.content === 'string' ? response.content.trim() : '';
-        const usage = (response as { usage_metadata?: { input_tokens?: number; output_tokens?: number } }).usage_metadata;
+        const text =
+          typeof response.content === 'string' ? response.content.trim() : '';
+        const usage = (
+          response as {
+            usage_metadata?: { input_tokens?: number; output_tokens?: number };
+          }
+        ).usage_metadata;
         promptTokens = usage?.input_tokens ?? 0;
         completionTokens = usage?.output_tokens ?? 0;
 
@@ -84,17 +111,20 @@ export function createPlannerNode(structuredLlm: ChatModel, emit: EmitFn, tracer
         shouldClarify: false,
         clarificationQuestions: [],
         confidenceLevel: 'low',
-        steps: state.relevantDatasets.length > 0
-          ? [{
-              id: 1,
-              description: state.userQuestion,
-              strategy: 'sql',
-              dependsOn: [],
-              datasets: state.relevantDatasets.slice(0, 2),
-              expectedOutput: 'query results',
-              chartType: null,
-            }]
-          : [],
+        steps:
+          state.relevantDatasets.length > 0
+            ? [
+                {
+                  id: 1,
+                  description: state.userQuestion,
+                  strategy: 'sql',
+                  dependsOn: [],
+                  datasets: state.relevantDatasets.slice(0, 2),
+                  expectedOutput: 'query results',
+                  chartType: null,
+                },
+              ]
+            : [],
       };
     }
 
@@ -105,7 +135,10 @@ export function createPlannerNode(structuredLlm: ChatModel, emit: EmitFn, tracer
         shouldClarify: false,
         ambiguities: [
           ...plan.ambiguities,
-          ...plan.clarificationQuestions.map((q) => ({ question: q.question, assumption: q.assumption })),
+          ...plan.clarificationQuestions.map((q) => ({
+            question: q.question,
+            assumption: q.assumption,
+          })),
         ],
         clarificationQuestions: [],
       };
@@ -117,7 +150,11 @@ export function createPlannerNode(structuredLlm: ChatModel, emit: EmitFn, tracer
     return {
       plan,
       currentPhase: 'planner',
-      tokensUsed: { prompt: promptTokens, completion: completionTokens, total: promptTokens + completionTokens },
+      tokensUsed: {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: promptTokens + completionTokens,
+      },
     };
   };
 }

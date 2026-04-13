@@ -2,7 +2,7 @@ import { HumanMessage } from '@langchain/core/messages';
 
 import { discoveryService } from '../../../discovery.service';
 import { getChatModel, extractJsonFromText } from '../../../llm';
-import type { OSIDataset, OSIField, OSIMetric } from '../../../osi/types';
+import type { OSIDataset, OSIMetric } from '../../../osi/types';
 import type { DiscoveredColumn, DiscoveredTable } from '../../../types';
 import type { AgentStateType } from '../state';
 
@@ -103,24 +103,41 @@ async function processTable(
 ): Promise<{ dataset: OSIDataset; metrics: OSIMetric[] } | null> {
   try {
     const sampleData = await discoveryService
-      .getSampleData(driverId, config, { schema: table.schema, table: table.name }, 5)
+      .getSampleData(
+        driverId,
+        config,
+        { schema: table.schema, table: table.name },
+        5,
+      )
       .catch(() => ({ columns: [], rows: [] }));
 
-    const prompt = buildPrompt(table, sampleData.rows, sampleData.columns, instructions);
+    const prompt = buildPrompt(
+      table,
+      sampleData.rows,
+      sampleData.columns,
+      instructions,
+    );
     const llm = getChatModel();
     const response = await llm.invoke([new HumanMessage(prompt)]);
-    const text = typeof response.content === 'string' ? response.content : String(response.content);
+    const text =
+      typeof response.content === 'string'
+        ? response.content
+        : String(response.content);
 
     const parsed = extractJsonFromText(text) as LlmDatasetOutput;
 
     // Inject authoritative type info from actual schema (don't trust LLM for this)
-    const colMap = new Map<string, DiscoveredColumn>(table.columns.map((c) => [c.name, c]));
+    const colMap = new Map<string, DiscoveredColumn>(
+      table.columns.map((c) => [c.name, c]),
+    );
     if (parsed.dataset.fields) {
       for (const field of parsed.dataset.fields) {
         const col = colMap.get(field.name);
         if (col && field.ai_context && typeof field.ai_context === 'object') {
-          (field.ai_context as Record<string, unknown>)['data_type'] = col.dataType;
-          (field.ai_context as Record<string, unknown>)['is_primary_key'] = col.isPrimaryKey;
+          (field.ai_context as Record<string, unknown>)['data_type'] =
+            col.dataType;
+          (field.ai_context as Record<string, unknown>)['is_primary_key'] =
+            col.isPrimaryKey;
         }
       }
     }
@@ -137,7 +154,9 @@ async function processTable(
   }
 }
 
-export async function discoverAndGenerateNode(state: AgentStateType): Promise<Partial<AgentStateType>> {
+export async function discoverAndGenerateNode(
+  state: AgentStateType,
+): Promise<Partial<AgentStateType>> {
   const { schema, driverId, config, instructions } = state;
   const tables = schema.tables;
 

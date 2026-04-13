@@ -1,7 +1,11 @@
 import { HumanMessage } from '@langchain/core/messages';
 
 import { getChatModel, extractJsonFromText } from '../../../llm';
-import type { OSIMetric, OSIRelationship, RelationshipCandidate } from '../../../osi/types';
+import type {
+  OSIMetric,
+  OSIRelationship,
+  RelationshipCandidate,
+} from '../../../osi/types';
 import type { AgentStateType } from '../state';
 
 function buildPrompt(
@@ -60,7 +64,9 @@ interface LlmRelationshipsOutput {
   model_metrics?: OSIMetric[];
 }
 
-export async function generateRelationshipsNode(state: AgentStateType): Promise<Partial<AgentStateType>> {
+export async function generateRelationshipsNode(
+  state: AgentStateType,
+): Promise<Partial<AgentStateType>> {
   const { relationshipCandidates, datasets, datasourceName } = state;
 
   if (relationshipCandidates.length === 0) {
@@ -68,12 +74,19 @@ export async function generateRelationshipsNode(state: AgentStateType): Promise<
   }
 
   const datasetNames = datasets.map((d) => d.name);
-  const prompt = buildPrompt(relationshipCandidates, datasetNames, datasourceName);
+  const prompt = buildPrompt(
+    relationshipCandidates,
+    datasetNames,
+    datasourceName,
+  );
 
   try {
     const llm = getChatModel();
     const response = await llm.invoke([new HumanMessage(prompt)]);
-    const text = typeof response.content === 'string' ? response.content : String(response.content);
+    const text =
+      typeof response.content === 'string'
+        ? response.content
+        : String(response.content);
     const parsed = extractJsonFromText(text) as LlmRelationshipsOutput;
 
     return {

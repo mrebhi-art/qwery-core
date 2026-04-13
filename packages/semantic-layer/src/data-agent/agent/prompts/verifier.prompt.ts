@@ -1,9 +1,17 @@
 import type { PlanArtifact, StepResult } from '../../types';
 
-export function buildVerifierPrompt(plan: PlanArtifact, stepResults: StepResult[]): string {
-  const checks = plan.acceptanceChecks.length > 0
-    ? plan.acceptanceChecks
-    : ['Results are non-empty', 'Column names match expected output', 'No obvious join explosion (row count is reasonable)'];
+export function buildVerifierPrompt(
+  plan: PlanArtifact,
+  stepResults: StepResult[],
+): string {
+  const checks =
+    plan.acceptanceChecks.length > 0
+      ? plan.acceptanceChecks
+      : [
+          'Results are non-empty',
+          'Column names match expected output',
+          'No obvious join explosion (row count is reasonable)',
+        ];
 
   const resultsSummary = stepResults
     .map((r) => {
@@ -11,7 +19,10 @@ export function buildVerifierPrompt(plan: PlanArtifact, stepResults: StepResult[
       if (r.sqlResult) {
         lines.push(`SQL rows: ${r.sqlResult.rowCount}`);
         lines.push(`Columns: ${r.sqlResult.columns.join(', ')}`);
-        const previewLines = r.sqlResult.data.split('\n').slice(0, 12).join('\n');
+        const previewLines = r.sqlResult.data
+          .split('\n')
+          .slice(0, 12)
+          .join('\n');
         lines.push(`Sample:\n${previewLines}`);
       }
       if (r.pythonResult) {

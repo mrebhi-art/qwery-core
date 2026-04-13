@@ -14,7 +14,8 @@ export function buildExplainerPrompt(
         lines.push(`Rows: ${r.sqlResult.rowCount}`);
         lines.push(`\`\`\`\n${r.sqlResult.data}\n\`\`\``);
       }
-      if (r.pythonResult?.stdout) lines.push(`Output:\n${r.pythonResult.stdout}`);
+      if (r.pythonResult?.stdout)
+        lines.push(`Output:\n${r.pythonResult.stdout}`);
       if (r.error) lines.push(`⚠️ Error: ${r.error}`);
       return lines.join('\n');
     })
@@ -26,9 +27,13 @@ export function buildExplainerPrompt(
       : `⚠️ Verification failed: ${verificationReport.diagnosis ?? 'unknown issue'}. Results may be approximate.`
     : '';
 
-  const ambiguities = plan.ambiguities.length > 0
-    ? '\n\n**Assumptions made:**\n' + plan.ambiguities.map((a) => `- ${a.question}: ${a.assumption}`).join('\n')
-    : '';
+  const ambiguities =
+    plan.ambiguities.length > 0
+      ? '\n\n**Assumptions made:**\n' +
+        plan.ambiguities
+          .map((a) => `- ${a.question}: ${a.assumption}`)
+          .join('\n')
+      : '';
 
   return `You are the Explainer node of a data analytics agent. Write a clear, direct answer to the user's question.
 
@@ -58,9 +63,13 @@ export function buildConversationalPrompt(
   conversationContext: string,
   datasetDetails?: Array<{ name: string; description: string; source: string }>,
 ): string {
-  const datasetsSection = datasetDetails && datasetDetails.length > 0
-    ? '\n## Available datasets\n' + datasetDetails.map((d) => `- **${d.name}** (${d.source}): ${d.description}`).join('\n')
-    : '';
+  const datasetsSection =
+    datasetDetails && datasetDetails.length > 0
+      ? '\n## Available datasets\n' +
+        datasetDetails
+          .map((d) => `- **${d.name}** (${d.source}): ${d.description}`)
+          .join('\n')
+      : '';
 
   return `You are a helpful data analytics assistant. Answer the user's question conversationally — no SQL or data queries are needed.
 

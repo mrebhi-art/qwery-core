@@ -1,8 +1,17 @@
 import type { OSISemanticModel } from '../../../osi/types';
 import type { AgentStateType } from '../state';
 
-export async function assembleModelNode(state: AgentStateType): Promise<Partial<AgentStateType>> {
-  const { datasets, relationships, tableMetrics, modelMetrics, datasourceName, instructions } = state;
+export async function assembleModelNode(
+  state: AgentStateType,
+): Promise<Partial<AgentStateType>> {
+  const {
+    datasets,
+    relationships,
+    tableMetrics,
+    modelMetrics,
+    datasourceName,
+    instructions,
+  } = state;
 
   // Flatten all per-table metrics + model-level metrics
   const allMetrics = [...tableMetrics.flat(), ...modelMetrics];

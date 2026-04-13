@@ -1,7 +1,18 @@
 import type { BaseMessage } from '@langchain/core/messages';
-import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/core/messages';
+import {
+  HumanMessage,
+  AIMessage,
+  ToolMessage,
+  SystemMessage,
+} from '@langchain/core/messages';
 import type { DataAgentStateType } from '../../state';
-import type { EmitFn, JoinPlanArtifact, JoinEdge, DatasetDetail, CannotAnswerArtifact } from '../../types';
+import type {
+  EmitFn,
+  JoinPlanArtifact,
+  JoinEdge,
+  DatasetDetail,
+  CannotAnswerArtifact,
+} from '../../types';
 import { buildNavigatorPrompt } from '../prompts/navigator.prompt';
 import { createListDatasetsTool } from '../tools/list-datasets';
 import { createGetDatasetDetailsTool } from '../tools/get-dataset-details';
@@ -20,8 +31,14 @@ export function createNavigatorNode(
   emit: EmitFn,
   tracer: DataAgentTracer,
 ) {
-  return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
-    emit({ type: 'phase_start', phase: 'navigator', description: 'Exploring ontology to build join map' });
+  return async (
+    state: DataAgentStateType,
+  ): Promise<Partial<DataAgentStateType>> => {
+    emit({
+      type: 'phase_start',
+      phase: 'navigator',
+      description: 'Exploring ontology to build join map',
+    });
 
     const plan = state.plan!;
     const tools = [
@@ -43,11 +60,18 @@ export function createNavigatorNode(
 
     // ReAct loop
     for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const response = await tracer.trace('navigator', `react_step_${i}`, false, () =>
-        boundLlm.invoke(messages),
+      const response = await tracer.trace(
+        'navigator',
+        `react_step_${i}`,
+        false,
+        () => boundLlm.invoke(messages),
       );
 
-      const usage = (response as { usage_metadata?: { input_tokens?: number; output_tokens?: number } }).usage_metadata;
+      const usage = (
+        response as {
+          usage_metadata?: { input_tokens?: number; output_tokens?: number };
+        }
+      ).usage_metadata;
       promptTokens += usage?.input_tokens ?? 0;
       completionTokens += usage?.output_tokens ?? 0;
 
@@ -57,17 +81,32 @@ export function createNavigatorNode(
       if (toolCalls.length === 0) break;
 
       for (const tc of toolCalls) {
-        emit({ type: 'tool_start', phase: 'navigator', name: tc.name, args: tc.args as Record<string, unknown> });
+        emit({
+          type: 'tool_start',
+          phase: 'navigator',
+          name: tc.name,
+          args: tc.args as Record<string, unknown>,
+        });
         try {
           const tool = toolMap[tc.name];
           const result = tool
             ? await (tool.invoke as (x: unknown) => Promise<unknown>)(tc.args)
             : `Unknown tool: ${tc.name}`;
-          emit({ type: 'tool_end', phase: 'navigator', name: tc.name, result: String(result).slice(0, 500) });
+          emit({
+            type: 'tool_end',
+            phase: 'navigator',
+            name: tc.name,
+            result: String(result).slice(0, 500),
+          });
           messages.push(new ToolMessage(String(result), tc.id ?? ''));
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
-          emit({ type: 'tool_error', phase: 'navigator', name: tc.name, error: errMsg });
+          emit({
+            type: 'tool_error',
+            phase: 'navigator',
+            name: tc.name,
+            error: errMsg,
+          });
           messages.push(new ToolMessage(`Error: ${errMsg}`, tc.id ?? ''));
         }
       }
@@ -93,17 +132,32 @@ export function createNavigatorNode(
     const foundNames = new Set(rawDetails.map((d) => d.name));
     const missingDatasets = [...planDatasets].filter((n) => !foundNames.has(n));
 
-    if (missingDatasets.length > 0 && planDatasets.size > 0 && relevantDatasets.length === 0) {
+    if (
+      missingDatasets.length > 0 &&
+      planDatasets.size > 0 &&
+      relevantDatasets.length === 0
+    ) {
       const cannotAnswer: CannotAnswerArtifact = {
         reason: `Required datasets not found in ontology: ${missingDatasets.join(', ')}`,
-        suggestions: ['Run Stage 3 (ontology build) first', 'Verify the datasource has been indexed'],
+        suggestions: [
+          'Run Stage 3 (ontology build) first',
+          'Verify the datasource has been indexed',
+        ],
       };
-      emit({ type: 'phase_artifact', phase: 'navigator', artifact: { cannotAnswer } });
+      emit({
+        type: 'phase_artifact',
+        phase: 'navigator',
+        artifact: { cannotAnswer },
+      });
       emit({ type: 'phase_complete', phase: 'navigator' });
       return {
         cannotAnswer,
         currentPhase: 'navigator',
-        tokensUsed: { prompt: promptTokens, completion: completionTokens, total: promptTokens + completionTokens },
+        tokensUsed: {
+          prompt: promptTokens,
+          completion: completionTokens,
+          total: promptTokens + completionTokens,
+        },
         messages,
       };
     }
@@ -115,7 +169,8 @@ export function createNavigatorNode(
       const edges: JoinEdge[] = allRelationships
         .filter(
           (r) =>
-            step.datasets.includes(r.fromDataset) && step.datasets.includes(r.toDataset),
+            step.datasets.includes(r.fromDataset) &&
+            step.datasets.includes(r.toDataset),
         )
         .map((r) => ({
           fromDataset: r.fromDataset,
@@ -131,7 +186,9 @@ export function createNavigatorNode(
     const lastAI = [...messages].reverse().find((m) => m._getType() === 'ai');
     const notes = [
       typeof lastAI?.content === 'string' ? lastAI.content : '',
-      missingDatasets.length > 0 ? `\nWARNING: datasets not found: ${missingDatasets.join(', ')}` : '',
+      missingDatasets.length > 0
+        ? `\nWARNING: datasets not found: ${missingDatasets.join(', ')}`
+        : '',
     ]
       .filter(Boolean)
       .join('');
@@ -144,7 +201,11 @@ export function createNavigatorNode(
     return {
       joinPlan,
       currentPhase: 'navigator',
-      tokensUsed: { prompt: promptTokens, completion: completionTokens, total: promptTokens + completionTokens },
+      tokensUsed: {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: promptTokens + completionTokens,
+      },
       messages,
     };
   };

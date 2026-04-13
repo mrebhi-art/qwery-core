@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from 'react';
-import { useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Send, Loader2, Bot, User, AlertCircle } from 'lucide-react';
 
@@ -24,7 +23,8 @@ export async function clientLoader(args: Route.ClientLoaderArgs) {
     const datasource = await service.execute(slug);
     return { datasource };
   } catch (error) {
-    if (error instanceof DomainException) throw new Response('Not Found', { status: 404 });
+    if (error instanceof DomainException)
+      throw new Response('Not Found', { status: 404 });
     throw error;
   }
 }
@@ -47,15 +47,16 @@ interface ChatMessage {
 }
 
 function getApiBaseUrl(): string {
-  if (typeof window !== 'undefined' && (window as { __QWERY_API_URL?: string }).__QWERY_API_URL) {
+  if (
+    typeof window !== 'undefined' &&
+    (window as { __QWERY_API_URL?: string }).__QWERY_API_URL
+  ) {
     return (window as { __QWERY_API_URL?: string }).__QWERY_API_URL!;
   }
   return import.meta.env?.VITE_API_URL || '/api';
 }
 
 export default function DataAgentPage(props: Route.ComponentProps) {
-  const params = useParams();
-  const slug = params.slug as string;
   const { t } = useTranslation();
   const { datasource } = props.loaderData;
 
@@ -80,16 +81,19 @@ export default function DataAgentPage(props: Route.ComponentProps) {
 
       try {
         const baseUrl = getApiBaseUrl();
-        const response = await fetch(`${baseUrl}/datasources/${datasource.id}/query`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question,
-            conversationContext: conversationContextRef.current,
-            clarificationRound: clarificationRoundRef.current,
-          }),
-          signal: abortRef.current.signal,
-        });
+        const response = await fetch(
+          `${baseUrl}/datasources/${datasource.id}/query`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question,
+              conversationContext: conversationContextRef.current,
+              clarificationRound: clarificationRoundRef.current,
+            }),
+            signal: abortRef.current.signal,
+          },
+        );
 
         if (!response.ok || !response.body) {
           throw new Error(`HTTP ${response.status}`);
@@ -120,7 +124,10 @@ export default function DataAgentPage(props: Route.ComponentProps) {
                 content?: string;
                 matchedDatasets?: Array<{ name: string }>;
                 questions?: ClarificationQuestion[];
-                metadata?: { tokensUsed?: { total: number }; lineage?: { datasetsUsed?: string[] } };
+                metadata?: {
+                  tokensUsed?: { total: number };
+                  lineage?: { datasetsUsed?: string[] };
+                };
                 status?: string;
                 message?: string;
                 phase?: string;
@@ -136,14 +143,12 @@ export default function DataAgentPage(props: Route.ComponentProps) {
               } else if (event.type === 'phase_complete') {
                 setCurrentPhase(null);
               } else if (event.type === 'llm_call_start') {
-                // eslint-disable-next-line no-console
                 console.debug('[agent:llm_call_start]', {
                   phase: event.phase,
                   purpose: event.purpose,
                   callIndex: event.callIndex,
                 });
               } else if (event.type === 'llm_call_end') {
-                // eslint-disable-next-line no-console
                 console.debug('[agent:llm_call_end]', {
                   phase: event.phase,
                   purpose: event.purpose,
@@ -154,17 +159,27 @@ export default function DataAgentPage(props: Route.ComponentProps) {
               } else if (event.type === 'text' && event.content) {
                 setMessages((prev) =>
                   prev.map((m) =>
-                    m.id === assistantMsgId ? { ...m, content: m.content + event.content } : m,
+                    m.id === assistantMsgId
+                      ? { ...m, content: m.content + event.content }
+                      : m,
                   ),
                 );
                 scrollToBottom();
-              } else if (event.type === 'discovery_complete' && event.matchedDatasets) {
+              } else if (
+                event.type === 'discovery_complete' &&
+                event.matchedDatasets
+              ) {
                 matchedDatasets = event.matchedDatasets.map((d) => d.name);
-              } else if (event.type === 'clarification_requested' && event.questions) {
+              } else if (
+                event.type === 'clarification_requested' &&
+                event.questions
+              ) {
                 pendingClarificationQuestionsRef.current = event.questions;
               } else if (event.type === 'message_complete') {
-                if (event.metadata?.tokensUsed) tokensUsed = event.metadata.tokensUsed;
-                const datasetsUsed = event.metadata?.lineage?.datasetsUsed ?? matchedDatasets;
+                if (event.metadata?.tokensUsed)
+                  tokensUsed = event.metadata.tokensUsed;
+                const datasetsUsed =
+                  event.metadata?.lineage?.datasetsUsed ?? matchedDatasets;
 
                 if (event.status === 'clarification_needed') {
                   // Mark message as needing clarification
@@ -172,7 +187,13 @@ export default function DataAgentPage(props: Route.ComponentProps) {
                   setMessages((prev) =>
                     prev.map((m) =>
                       m.id === assistantMsgId
-                        ? { ...m, status: 'clarification_needed', clarificationQuestions: questions, matchedDatasets: datasetsUsed, tokensUsed }
+                        ? {
+                            ...m,
+                            status: 'clarification_needed',
+                            clarificationQuestions: questions,
+                            matchedDatasets: datasetsUsed,
+                            tokensUsed,
+                          }
                         : m,
                     ),
                   );
@@ -194,7 +215,11 @@ export default function DataAgentPage(props: Route.ComponentProps) {
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === assistantMsgId
-                      ? { ...m, role: 'error', content: event.message ?? 'An error occurred' }
+                      ? {
+                          ...m,
+                          role: 'error',
+                          content: event.message ?? 'An error occurred',
+                        }
                       : m,
                   ),
                 );
@@ -230,9 +255,17 @@ export default function DataAgentPage(props: Route.ComponentProps) {
       if (!questionOverride) setInput('');
       setIsStreaming(true);
 
-      const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: question };
+      const userMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: question,
+      };
       const assistantMsgId = crypto.randomUUID();
-      const assistantMsg: ChatMessage = { id: assistantMsgId, role: 'assistant', content: '' };
+      const assistantMsg: ChatMessage = {
+        id: assistantMsgId,
+        role: 'assistant',
+        content: '',
+      };
 
       setMessages((prev) => [...prev, userMsg, assistantMsg]);
       scrollToBottom();
@@ -252,11 +285,14 @@ export default function DataAgentPage(props: Route.ComponentProps) {
 
       // Mark message as answered
       setMessages((prev) =>
-        prev.map((m) => (m.id === msg.id ? { ...m, status: 'clarification_answered' } : m)),
+        prev.map((m) =>
+          m.id === msg.id ? { ...m, status: 'clarification_answered' } : m,
+        ),
       );
 
       // Re-submit with the same question (last user message in the array)
-      const originalQuestion = messages.findLast((m) => m.role === 'user')?.content ?? '';
+      const originalQuestion =
+        messages.findLast((m) => m.role === 'user')?.content ?? '';
       void handleSubmit(originalQuestion);
     },
     [messages, handleSubmit],
@@ -268,10 +304,13 @@ export default function DataAgentPage(props: Route.ComponentProps) {
       conversationContextRef.current += `\n[Clarification round ${clarificationRoundRef.current}] Proceeding with assumptions.`;
 
       setMessages((prev) =>
-        prev.map((m) => (m.id === msg.id ? { ...m, status: 'clarification_answered' } : m)),
+        prev.map((m) =>
+          m.id === msg.id ? { ...m, status: 'clarification_answered' } : m,
+        ),
       );
 
-      const originalQuestion = messages.findLast((m) => m.role === 'user')?.content ?? '';
+      const originalQuestion =
+        messages.findLast((m) => m.role === 'user')?.content ?? '';
       void handleSubmit(originalQuestion);
     },
     [messages, handleSubmit],
@@ -339,7 +378,9 @@ export default function DataAgentPage(props: Route.ComponentProps) {
                 )}
               </div>
 
-              <div className={`flex max-w-[80%] flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <div
+                className={`flex max-w-[80%] flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+              >
                 <div
                   className={`rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
                     msg.role === 'user'
@@ -353,7 +394,9 @@ export default function DataAgentPage(props: Route.ComponentProps) {
                   {msg.content ||
                     (msg.status === 'clarification_needed' ? null : (
                       <span className="text-muted-foreground flex items-center gap-1">
-                        {isStreaming && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {isStreaming && (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        )}
                         {isStreaming
                           ? currentPhase
                             ? `${currentPhase.replace('_', ' ')}…`
@@ -363,25 +406,36 @@ export default function DataAgentPage(props: Route.ComponentProps) {
                     ))}
                 </div>
 
-                {msg.role === 'assistant' && msg.status === 'clarification_needed' && msg.clarificationQuestions && msg.clarificationQuestions.length > 0 && (
-                  <ClarificationCard
-                    questions={msg.clarificationQuestions}
-                    disabled={isStreaming}
-                    onAnswer={(text) => handleClarificationAnswer(msg, text)}
-                    onProceedWithAssumptions={() => handleProceedWithAssumptions(msg)}
-                  />
-                )}
+                {msg.role === 'assistant' &&
+                  msg.status === 'clarification_needed' &&
+                  msg.clarificationQuestions &&
+                  msg.clarificationQuestions.length > 0 && (
+                    <ClarificationCard
+                      questions={msg.clarificationQuestions}
+                      disabled={isStreaming}
+                      onAnswer={(text) => handleClarificationAnswer(msg, text)}
+                      onProceedWithAssumptions={() =>
+                        handleProceedWithAssumptions(msg)
+                      }
+                    />
+                  )}
 
-                {msg.role === 'assistant' && (msg.matchedDatasets || msg.tokensUsed) && (
-                  <div className="text-muted-foreground flex flex-wrap gap-2 px-1 text-xs">
-                    {msg.matchedDatasets && msg.matchedDatasets.length > 0 && (
-                      <span>Datasets: {msg.matchedDatasets.join(', ')}</span>
-                    )}
-                    {msg.tokensUsed && msg.tokensUsed.total > 0 && (
-                      <span>{msg.tokensUsed.total.toLocaleString()} tokens</span>
-                    )}
-                  </div>
-                )}
+                {msg.role === 'assistant' &&
+                  (msg.matchedDatasets || msg.tokensUsed) && (
+                    <div className="text-muted-foreground flex flex-wrap gap-2 px-1 text-xs">
+                      {msg.matchedDatasets &&
+                        msg.matchedDatasets.length > 0 && (
+                          <span>
+                            Datasets: {msg.matchedDatasets.join(', ')}
+                          </span>
+                        )}
+                      {msg.tokensUsed && msg.tokensUsed.total > 0 && (
+                        <span>
+                          {msg.tokensUsed.total.toLocaleString()} tokens
+                        </span>
+                      )}
+                    </div>
+                  )}
               </div>
             </div>
           ))}
@@ -399,7 +453,7 @@ export default function DataAgentPage(props: Route.ComponentProps) {
             placeholder={t('datasource.agent.inputPlaceholder', {
               defaultValue: 'Ask a question about your data… (Enter to send)',
             })}
-            className="min-h-[44px] max-h-[200px] resize-none"
+            className="max-h-[200px] min-h-[44px] resize-none"
             rows={1}
             disabled={isStreaming}
             data-test="agent-input"
@@ -420,7 +474,8 @@ export default function DataAgentPage(props: Route.ComponentProps) {
         </div>
         <p className="text-muted-foreground mt-2 text-xs">
           {t('datasource.agent.hint', {
-            defaultValue: 'Shift+Enter for a new line. Requires Stage 1–3 to be completed.',
+            defaultValue:
+              'Shift+Enter for a new line. Requires Stage 1–3 to be completed.',
           })}
         </p>
       </div>

@@ -22,7 +22,9 @@ export class SemanticModelService {
 
     const record = await loadDiscoveryRecord(datasourceId);
     if (!record?.schema) {
-      throw new Error(`No discovered schema found for datasource ${datasourceId}. Run schema discovery first.`);
+      throw new Error(
+        `No discovered schema found for datasource ${datasourceId}. Run schema discovery first.`,
+      );
     }
 
     await saveSemanticModelStatusRecord({
@@ -96,7 +98,9 @@ export class SemanticModelService {
     return record?.model ?? null;
   }
 
-  async getStatus(datasourceId: string): Promise<SemanticModelStatusRecord | null> {
+  async getStatus(
+    datasourceId: string,
+  ): Promise<SemanticModelStatusRecord | null> {
     return loadSemanticModelStatusRecord(datasourceId);
   }
 }

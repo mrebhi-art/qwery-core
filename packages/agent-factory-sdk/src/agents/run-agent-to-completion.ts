@@ -5,12 +5,11 @@ import { insertReminders } from './insert-reminders';
 import { Registry } from '../tools/registry';
 import type { AskRequest, ToolContext, ToolMetadataInput } from '../tools/tool';
 import { LLM, type StreamInput } from '../llm/llm';
-import type { Message } from '../llm/message';
+import type { Message, MessageContentPart } from '../llm/message';
 import {
   messageRoleToUIRole,
   uiRoleToMessageRole,
 } from '@qwery/shared/message-role-utils';
-import { getLogger } from '@qwery/shared/logger';
 import { getDefaultModel } from '../services/model-resolver';
 import {
   resolveModel,
@@ -19,6 +18,7 @@ import {
   persistUsageResult,
   persistMessageResult,
 } from './agent-orchestration';
+import { MessageRole } from '@qwery/domain/entities';
 
 export type RunAgentToCompletionInput = {
   conversationId: string;
@@ -48,7 +48,6 @@ export type RunAgentToCompletionResult = {
 export async function runAgentToCompletion(
   input: RunAgentToCompletionInput,
 ): Promise<RunAgentToCompletionResult> {
-  const logger = await getLogger();
   const {
     conversationId,
     conversationSlug,
@@ -66,8 +65,10 @@ export async function runAgentToCompletion(
 
   const agentInfo = resolveAgent(agentId);
   const { providerModel, modelForRegistry } = resolveModel(modelInput);
-  const { datasources: loadedDatasources, reminderContext } =
-    await loadAndFormatDatasources(datasources ?? [], repositories.datasource);
+  const { reminderContext } = await loadAndFormatDatasources(
+    datasources ?? [],
+    repositories.datasource,
+  );
 
   const assistantMessageId = uuidv4();
   const getContext = (options: {
@@ -112,6 +113,60 @@ export async function runAgentToCompletion(
     createdBy: 'system',
     updatedBy: 'system',
   }));
+
+  // Prefetch join relationships so the agent can plan JOINs before writing SQL.
+  // This is especially useful now that the ontology has richer relationships,
+  // but we still keep RELATES_TO as the join source of truth.
+  if (
+    (agentId === 'query' || agentId === 'ask') &&
+    (datasources?.length ?? 0) > 0
+  ) {
+    try {
+      const { ontologyService } = await import(
+        '@qwery/semantic-layer/ontology'
+      );
+      const lastUser = msgsAsMessages.findLast(
+        (m) => m.role === MessageRole.USER,
+      );
+      if (lastUser) {
+        const parts = lastUser.content?.parts ?? [];
+        const blocks: string[] = [];
+
+        for (const datasourceId of datasources ?? []) {
+          const rels = await ontologyService
+            .getRelationships(datasourceId)
+            .catch(() => []);
+          if (rels.length === 0) continue;
+          const shown = rels.slice(0, 50);
+          const lines = shown.map(
+            (r) =>
+              `- ${r.fromDataset}.${r.fromColumns.join(', ')} → ${r.toDataset}.${r.toColumns.join(', ')} (${r.name})`,
+          );
+          blocks.push(
+            `## Prefetched joins (${datasourceId})\n${lines.join('\n')}${rels.length > shown.length ? `\n… +${rels.length - shown.length} more` : ''}`,
+          );
+        }
+
+        if (blocks.length > 0) {
+          const reminderPart: MessageContentPart & {
+            synthetic?: boolean;
+          } = {
+            type: 'text',
+            text:
+              `<system-reminder>\n` +
+              `Join map (from ontology). Use this to plan JOINs before calling runQuery:\n\n` +
+              `${blocks.join('\n\n')}\n` +
+              `</system-reminder>`,
+            synthetic: true,
+          };
+          parts.push(reminderPart);
+          lastUser.content = { ...(lastUser.content ?? {}), parts };
+        }
+      }
+    } catch {
+      // ignore prefetch failures
+    }
+  }
   const msgsWithReminders = insertReminders({
     messages: msgsAsMessages,
     agent: agentInfo,

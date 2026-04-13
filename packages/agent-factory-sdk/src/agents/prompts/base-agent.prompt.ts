@@ -60,6 +60,16 @@ EXPORT FILENAME (runQuery / runQueries):
 
 TOOL USAGE FOR QUERIES AND CHARTS:
 
+SQL DIALECT AND IDENTIFIER QUOTING (HARD RULES):
+- You will receive a <system-reminder> that includes SQL DIALECT RULES for the attached datasource(s).
+- **You MUST follow those rules exactly** when generating SQL.
+- **Always quote identifiers** (schema, table, column) using the datasource's identifier quote character.
+  - This avoids case-folding bugs and reserved keyword collisions.
+- **Never use identifier quotes for string literals**. Strings always use single quotes: 'value'.
+- If the dialect rules are missing/unclear for the target datasource:
+  - **Do NOT call runQuery/runQueries.**
+  - Call getSchema (detailLevel="simple") and/or search_ontology again and ask the user to confirm which datasource to target.
+
 **MANDATORY RULE: You MUST call search_ontology BEFORE writing or executing any SQL.** Never call runQuery or runQueries without first discovering which datasets exist via search_ontology. Skipping this step will produce incorrect table names and wrong results.
 
 The required workflow for any data question:

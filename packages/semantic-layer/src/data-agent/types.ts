@@ -20,10 +20,14 @@ export const PlanArtifactSchema = z.object({
   timeWindow: z.string().nullable(),
   filters: z.array(z.string()),
   grain: z.string(),
-  ambiguities: z.array(z.object({ question: z.string(), assumption: z.string() })),
+  ambiguities: z.array(
+    z.object({ question: z.string(), assumption: z.string() }),
+  ),
   acceptanceChecks: z.array(z.string()),
   shouldClarify: z.boolean(),
-  clarificationQuestions: z.array(z.object({ question: z.string(), assumption: z.string() })),
+  clarificationQuestions: z.array(
+    z.object({ question: z.string(), assumption: z.string() }),
+  ),
   confidenceLevel: z.enum(['high', 'medium', 'low']),
   steps: z.array(PlanStepSchema),
 });
@@ -199,15 +203,50 @@ export type AgentStreamEvent =
       responsePreview: string;
       toolCallCount: number;
     }
-  | { type: 'token_update'; phase: DataAgentPhase; tokensUsed: { prompt: number; completion: number; total: number } }
-  | { type: 'tool_start'; phase: DataAgentPhase; stepId?: number; name: string; args: Record<string, unknown> }
-  | { type: 'tool_end'; phase: DataAgentPhase; stepId?: number; name: string; result: string }
-  | { type: 'tool_error'; phase: DataAgentPhase; stepId?: number; name: string; error: string }
-  | { type: 'step_start'; stepId: number; description: string; strategy: string }
+  | {
+      type: 'token_update';
+      phase: DataAgentPhase;
+      tokensUsed: { prompt: number; completion: number; total: number };
+    }
+  | {
+      type: 'tool_start';
+      phase: DataAgentPhase;
+      stepId?: number;
+      name: string;
+      args: Record<string, unknown>;
+    }
+  | {
+      type: 'tool_end';
+      phase: DataAgentPhase;
+      stepId?: number;
+      name: string;
+      result: string;
+    }
+  | {
+      type: 'tool_error';
+      phase: DataAgentPhase;
+      stepId?: number;
+      name: string;
+      error: string;
+    }
+  | {
+      type: 'step_start';
+      stepId: number;
+      description: string;
+      strategy: string;
+    }
   | { type: 'step_complete'; stepId: number }
   | { type: 'text'; content: string }
-  | { type: 'clarification_requested'; questions: Array<{ question: string; assumption: string }> }
-  | { type: 'message_complete'; content: string; metadata: Record<string, unknown>; status?: 'clarification_needed' }
+  | {
+      type: 'clarification_requested';
+      questions: Array<{ question: string; assumption: string }>;
+    }
+  | {
+      type: 'message_complete';
+      content: string;
+      metadata: Record<string, unknown>;
+      status?: 'clarification_needed';
+    }
   | { type: 'message_error'; message: string };
 
 export type EmitFn = (event: AgentStreamEvent) => void;

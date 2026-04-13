@@ -72,7 +72,8 @@ export function adaptMetadataToDiscoveredSchema(
       isNullable: col.is_nullable,
       isPrimaryKey: pkNames.has(col.name),
       isUnique: col.is_unique ?? false,
-      defaultValue: col.default_value != null ? String(col.default_value) : null,
+      defaultValue:
+        col.default_value != null ? String(col.default_value) : null,
       comment: col.comment ?? null,
     }));
 
@@ -91,7 +92,11 @@ export function adaptMetadataToDiscoveredSchema(
     viewNames ??
     new Set(
       (
-        (metadata as unknown as { views?: Array<{ schema: string; name: string }> }).views ?? []
+        (
+          metadata as unknown as {
+            views?: Array<{ schema: string; name: string }>;
+          }
+        ).views ?? []
       ).map((v) => `${v.schema}.${v.name}`),
     );
 

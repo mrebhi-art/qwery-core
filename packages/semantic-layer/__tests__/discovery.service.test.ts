@@ -63,7 +63,11 @@ const mockMetadata = {
   ],
 };
 
-const mockDriverExt = { id: 'postgresql.default', name: 'PostgreSQL', runtime: 'node' };
+const mockDriverExt = {
+  id: 'postgresql.default',
+  name: 'PostgreSQL',
+  runtime: 'node',
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -136,7 +140,9 @@ describe('DiscoveryService.getSampleData', () => {
 
     expect(result.columns).toEqual(['id', 'name']);
     expect(result.rows).toHaveLength(2);
-    expect(mockDriver.query).toHaveBeenCalledWith(expect.stringContaining('LIMIT 2'));
+    expect(mockDriver.query).toHaveBeenCalledWith(
+      expect.stringContaining('LIMIT 2'),
+    );
   });
 });
 

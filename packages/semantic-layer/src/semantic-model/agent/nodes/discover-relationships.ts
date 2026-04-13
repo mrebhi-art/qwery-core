@@ -13,8 +13,9 @@ function datasetNameFromTable(schema: string, table: string): string {
 }
 
 /** Find FK candidates by column naming convention */
-function findNamingCandidates(schema: DiscoveredSchema): RelationshipCandidate[] {
-  const tableNames = new Set(schema.tables.map((t) => normalize(t.name)));
+function findNamingCandidates(
+  schema: DiscoveredSchema,
+): RelationshipCandidate[] {
   const tableByNorm = new Map(schema.tables.map((t) => [normalize(t.name), t]));
 
   const candidates: RelationshipCandidate[] = [];
@@ -32,12 +33,18 @@ function findNamingCandidates(schema: DiscoveredSchema): RelationshipCandidate[]
       }
       if (!matchedSuffix) continue;
 
-      const prefix = normalize(col.name.slice(0, col.name.length - matchedSuffix.length));
+      const prefix = normalize(
+        col.name.slice(0, col.name.length - matchedSuffix.length),
+      );
       if (!prefix) continue;
 
       const toTable = tableByNorm.get(prefix);
       if (!toTable) continue;
-      if (toTable.name === fromTable.name && toTable.schema === fromTable.schema) continue;
+      if (
+        toTable.name === fromTable.name &&
+        toTable.schema === fromTable.schema
+      )
+        continue;
 
       // Find PK column of target table
       const pkCol = toTable.columns.find((c) => c.isPrimaryKey);
@@ -61,7 +68,7 @@ function findNamingCandidates(schema: DiscoveredSchema): RelationshipCandidate[]
   return candidates;
 }
 
-function fkToCandidate(fk: ForeignKeyInfo, schema: DiscoveredSchema): RelationshipCandidate {
+function fkToCandidate(fk: ForeignKeyInfo): RelationshipCandidate {
   return {
     constraintName: fk.constraintName,
     fromDataset: datasetNameFromTable(fk.fromSchema, fk.fromTable),
@@ -73,15 +80,19 @@ function fkToCandidate(fk: ForeignKeyInfo, schema: DiscoveredSchema): Relationsh
   };
 }
 
-export async function discoverRelationshipsNode(state: AgentStateType): Promise<Partial<AgentStateType>> {
+export async function discoverRelationshipsNode(
+  state: AgentStateType,
+): Promise<Partial<AgentStateType>> {
   const { schema } = state;
 
   // Explicit FK constraints → high confidence
-  const explicitCandidates = schema.foreignKeys.map((fk) => fkToCandidate(fk, schema));
+  const explicitCandidates = schema.foreignKeys.map((fk) => fkToCandidate(fk));
 
   // Build a set of explicit FK pairs to avoid duplicates
   const explicitPairs = new Set(
-    explicitCandidates.map((c) => `${c.fromDataset}:${c.fromColumns.join(',')}→${c.toDataset}`),
+    explicitCandidates.map(
+      (c) => `${c.fromDataset}:${c.fromColumns.join(',')}→${c.toDataset}`,
+    ),
   );
 
   // Naming heuristics → low confidence, deduplicated against explicit
@@ -90,7 +101,10 @@ export async function discoverRelationshipsNode(state: AgentStateType): Promise<
     return !explicitPairs.has(key);
   });
 
-  const relationshipCandidates = [...explicitCandidates, ...heuristicCandidates];
+  const relationshipCandidates = [
+    ...explicitCandidates,
+    ...heuristicCandidates,
+  ];
 
   return { relationshipCandidates };
 }

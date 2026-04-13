@@ -21,25 +21,41 @@ export function createExecutorNode(
   emit: EmitFn,
   tracer: DataAgentTracer,
 ) {
-  return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
-    emit({ type: 'phase_start', phase: 'executor', description: 'Executing queries' });
+  return async (
+    state: DataAgentStateType,
+  ): Promise<Partial<DataAgentStateType>> => {
+    emit({
+      type: 'phase_start',
+      phase: 'executor',
+      description: 'Executing queries',
+    });
 
     const plan = state.plan!;
     const querySpecs = state.querySpecs ?? [];
     const joinPlan = state.joinPlan;
     const dialect = getDialectFromDriverId(state.driverId);
 
-    const datasetSchemas = joinPlan?.relevantDatasets
-      .map((d) => `### ${d.name}\n${d.yaml}`)
-      .join('\n\n') ?? '';
+    const datasetSchemas =
+      joinPlan?.relevantDatasets
+        .map((d) => `### ${d.name}\n${d.yaml}`)
+        .join('\n\n') ?? '';
 
     const stepResults: StepResult[] = [];
 
     for (const step of plan.steps) {
-      emit({ type: 'step_start', stepId: step.id, description: step.description, strategy: step.strategy });
+      emit({
+        type: 'step_start',
+        stepId: step.id,
+        description: step.description,
+        strategy: step.strategy,
+      });
 
       const spec = querySpecs.find((q) => q.stepId === step.id);
-      const result: StepResult = { stepId: step.id, description: step.description, strategy: step.strategy };
+      const result: StepResult = {
+        stepId: step.id,
+        description: step.description,
+        strategy: step.strategy,
+      };
 
       // Prior step context for dependent steps
       const priorContext = step.dependsOn
@@ -47,16 +63,27 @@ export function createExecutorNode(
           const dep = stepResults.find((r) => r.stepId === depId);
           if (!dep) return '';
           const lines: string[] = [`Step ${depId} result:`];
-          if (dep.sqlResult) lines.push(dep.sqlResult.data.split('\n').slice(0, 20).join('\n'));
-          if (dep.pythonResult?.stdout) lines.push(dep.pythonResult.stdout.slice(0, 500));
+          if (dep.sqlResult)
+            lines.push(dep.sqlResult.data.split('\n').slice(0, 20).join('\n'));
+          if (dep.pythonResult?.stdout)
+            lines.push(dep.pythonResult.stdout.slice(0, 500));
           return lines.join('\n');
         })
         .filter(Boolean)
         .join('\n\n');
 
       // ── SQL execution ─────────────────────────────────────────────────────
-      if ((step.strategy === 'sql' || step.strategy === 'sql_then_python') && spec) {
-        emit({ type: 'tool_start', phase: 'executor', stepId: step.id, name: 'executeQuery', args: { sql: spec.pilotSql } });
+      if (
+        (step.strategy === 'sql' || step.strategy === 'sql_then_python') &&
+        spec
+      ) {
+        emit({
+          type: 'tool_start',
+          phase: 'executor',
+          stepId: step.id,
+          name: 'executeQuery',
+          args: { sql: spec.pilotSql },
+        });
 
         let sqlResult: SqlResult | undefined;
         try {
@@ -84,20 +111,45 @@ export function createExecutorNode(
             columns: fullResult.columns,
             rowCount: fullResult.rows.length,
           };
-          emit({ type: 'tool_end', phase: 'executor', stepId: step.id, name: 'executeQuery', result: `${fullResult.rows.length} rows` });
+          emit({
+            type: 'tool_end',
+            phase: 'executor',
+            stepId: step.id,
+            name: 'executeQuery',
+            result: `${fullResult.rows.length} rows`,
+          });
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
-          emit({ type: 'tool_error', phase: 'executor', stepId: step.id, name: 'executeQuery', error: errMsg });
+          emit({
+            type: 'tool_error',
+            phase: 'executor',
+            stepId: step.id,
+            name: 'executeQuery',
+            error: errMsg,
+          });
 
           // Attempt SQL repair
           try {
-            const repairPrompt = buildExecutorRepairPrompt(step.description, spec.pilotSql, errMsg, dialect);
-            const repairResponse = await tracer.trace('executor', 'sql_repair', false, () =>
-              llm.invoke([new SystemMessage(repairPrompt), new HumanMessage(errMsg)]),
+            const repairPrompt = buildExecutorRepairPrompt(
+              step.description,
+              spec.pilotSql,
+              errMsg,
+              dialect,
             );
-            const repairedSql = typeof repairResponse.content === 'string'
-              ? repairResponse.content.trim()
-              : spec.fullSql;
+            const repairResponse = await tracer.trace(
+              'executor',
+              'sql_repair',
+              false,
+              () =>
+                llm.invoke([
+                  new SystemMessage(repairPrompt),
+                  new HumanMessage(errMsg),
+                ]),
+            );
+            const repairedSql =
+              typeof repairResponse.content === 'string'
+                ? repairResponse.content.trim()
+                : spec.fullSql;
 
             const repairedResult = await discoveryService.executeQuery(
               state.driverId,
@@ -105,7 +157,10 @@ export function createExecutorNode(
               repairedSql,
               500,
             );
-            const data = rowsToTable(repairedResult.columns, repairedResult.rows);
+            const data = rowsToTable(
+              repairedResult.columns,
+              repairedResult.rows,
+            );
             sqlResult = {
               stepId: step.id,
               pilotRows: repairedResult.rows.slice(0, 10),
@@ -136,8 +191,14 @@ export function createExecutorNode(
             result.sqlResult.data,
             priorContext,
           );
-          const llmWithChart = structuredLlm.withStructuredOutput(ChartSpecSchema, { name: 'generate_chart' });
-          const chartSpec = await llmWithChart.invoke([new SystemMessage(chartPrompt), new HumanMessage(state.userQuestion)]);
+          const llmWithChart = structuredLlm.withStructuredOutput(
+            ChartSpecSchema,
+            { name: 'generate_chart' },
+          );
+          const chartSpec = await llmWithChart.invoke([
+            new SystemMessage(chartPrompt),
+            new HumanMessage(state.userQuestion),
+          ]);
           result.chartSpec = chartSpec;
         } catch {
           // chart generation failed — non-blocking
@@ -159,11 +220,27 @@ export function createExecutorNode(
         );
 
         try {
-          emit({ type: 'tool_start', phase: 'executor', stepId: step.id, name: 'sandbox.execute', args: {} });
-          const codeResponse = await tracer.trace('executor', 'python_generation', false, () =>
-            llm.invoke([new SystemMessage(pythonPrompt), new HumanMessage(state.userQuestion)]),
+          emit({
+            type: 'tool_start',
+            phase: 'executor',
+            stepId: step.id,
+            name: 'sandbox.execute',
+            args: {},
+          });
+          const codeResponse = await tracer.trace(
+            'executor',
+            'python_generation',
+            false,
+            () =>
+              llm.invoke([
+                new SystemMessage(pythonPrompt),
+                new HumanMessage(state.userQuestion),
+              ]),
           );
-          const code = typeof codeResponse.content === 'string' ? codeResponse.content : '';
+          const code =
+            typeof codeResponse.content === 'string'
+              ? codeResponse.content
+              : '';
 
           const sandboxResult = await sandboxService.executeCode(code, 30);
           const pythonResult: PythonResult = {
@@ -174,11 +251,28 @@ export function createExecutorNode(
               .map((f) => `data:${f.mimeType};base64,${f.base64}`),
           };
           result.pythonResult = pythonResult;
-          emit({ type: 'tool_end', phase: 'executor', stepId: step.id, name: 'sandbox.execute', result: sandboxResult.stdout.slice(0, 200) });
+          emit({
+            type: 'tool_end',
+            phase: 'executor',
+            stepId: step.id,
+            name: 'sandbox.execute',
+            result: sandboxResult.stdout.slice(0, 200),
+          });
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
-          emit({ type: 'tool_error', phase: 'executor', stepId: step.id, name: 'sandbox.execute', error: errMsg });
-          result.pythonResult = { stdout: '', stderr: errMsg, charts: [], error: errMsg };
+          emit({
+            type: 'tool_error',
+            phase: 'executor',
+            stepId: step.id,
+            name: 'sandbox.execute',
+            error: errMsg,
+          });
+          result.pythonResult = {
+            stdout: '',
+            stderr: errMsg,
+            charts: [],
+            error: errMsg,
+          };
         }
       }
 

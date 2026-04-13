@@ -3,15 +3,24 @@ import { z } from 'zod';
 import type { NeoOntologyService } from '../../../ontology/neo-ontology.service';
 import { fieldsToYaml } from '../../utils';
 
-export function createGetDatasetDetailsTool(neoOntologyService: NeoOntologyService, datasourceId: string) {
+export function createGetDatasetDetailsTool(
+  neoOntologyService: NeoOntologyService,
+  datasourceId: string,
+) {
   return new DynamicStructuredTool({
     name: 'get_dataset_details',
-    description: 'Get YAML schema and field details for one or more datasets by name.',
+    description:
+      'Get YAML schema and field details for one or more datasets by name.',
     schema: z.object({
-      datasetNames: z.array(z.string()).describe('Names of datasets to retrieve'),
+      datasetNames: z
+        .array(z.string())
+        .describe('Names of datasets to retrieve'),
     }),
     func: async ({ datasetNames }) => {
-      const results = await neoOntologyService.getDatasetDetails(datasourceId, datasetNames);
+      const results = await neoOntologyService.getDatasetDetails(
+        datasourceId,
+        datasetNames,
+      );
       const sections: string[] = [];
 
       for (const name of datasetNames) {

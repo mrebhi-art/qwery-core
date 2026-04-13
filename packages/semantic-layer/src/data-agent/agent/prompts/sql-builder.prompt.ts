@@ -31,13 +31,19 @@ export function buildSqlBuilderPrompt(
     : '';
 
   const dialectRules: Record<string, string> = {
-    postgresql: '- Use standard PostgreSQL syntax. Date arithmetic: NOW() - INTERVAL \'30 days\'.',
-    mysql: '- Use MySQL syntax. Date arithmetic: DATE_SUB(NOW(), INTERVAL 30 DAY).',
+    postgresql:
+      "- Use standard PostgreSQL syntax. Date arithmetic: NOW() - INTERVAL '30 days'.",
+    mysql:
+      '- Use MySQL syntax. Date arithmetic: DATE_SUB(NOW(), INTERVAL 30 DAY).',
     clickhouse: '- Use ClickHouse syntax. Use toDate(), toStartOfMonth(), etc.',
-    duckdb: '- Use DuckDB syntax (compatible with PostgreSQL). Use CURRENT_DATE - INTERVAL 30 DAYS.',
-    snowflake: '- Use Snowflake syntax. Date arithmetic: DATEADD(day, -30, CURRENT_DATE()).',
+    duckdb:
+      '- Use DuckDB syntax (compatible with PostgreSQL). Use CURRENT_DATE - INTERVAL 30 DAYS.',
+    snowflake:
+      '- Use Snowflake syntax. Date arithmetic: DATEADD(day, -30, CURRENT_DATE()).',
   };
-  const dialectNote = dialectRules[databaseType.toLowerCase()] ?? `- Target database: ${databaseType}.`;
+  const dialectNote =
+    dialectRules[databaseType.toLowerCase()] ??
+    `- Target database: ${databaseType}.`;
 
   return `You are the SQL Builder node of a data analytics agent. Generate precise, executable SQL queries.
 

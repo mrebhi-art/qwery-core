@@ -27,7 +27,9 @@ export async function onDatasourceAttach(
   await updateDiscoveryStatus(id, 'running');
 
   try {
-    const revealedConfig = await datasourceRepo.revealSecrets(datasource.config);
+    const revealedConfig = await datasourceRepo.revealSecrets(
+      datasource.config,
+    );
 
     const schema = await discoveryService.discoverSchema(
       id,
@@ -63,14 +65,25 @@ export async function onDatasourceAttach(
     });
 
     semanticModelService
-      .generateModel(id, datasource.name ?? datasource_provider, datasource_driver, revealedConfig)
+      .generateModel(
+        id,
+        datasource.name ?? datasource_provider,
+        datasource_driver,
+        revealedConfig,
+      )
       .then(() =>
         ontologyService.buildOntology(id).catch((err: unknown) => {
-          logger.warn({ datasourceId: id, err }, 'semantic-layer: ontology build failed');
+          logger.warn(
+            { datasourceId: id, err },
+            'semantic-layer: ontology build failed',
+          );
         }),
       )
       .catch((err: unknown) => {
-        logger.warn({ datasourceId: id, err }, 'semantic-layer: semantic model generation failed');
+        logger.warn(
+          { datasourceId: id, err },
+          'semantic-layer: semantic model generation failed',
+        );
       });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

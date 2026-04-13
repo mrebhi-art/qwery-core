@@ -3,7 +3,13 @@ import { useMutation } from '@tanstack/react-query';
 import { apiGet, apiPost } from '~/lib/repositories/api-client';
 
 interface StageStatus {
-  status: 'not_started' | 'pending' | 'running' | 'indexing' | 'ready' | 'failed';
+  status:
+    | 'not_started'
+    | 'pending'
+    | 'running'
+    | 'indexing'
+    | 'ready'
+    | 'failed';
   updatedAt?: string;
   generatedAt?: string | null;
   error?: string | null;
@@ -16,7 +22,11 @@ export interface PipelineStatus {
 }
 
 function isRunning(status: StageStatus): boolean {
-  return status.status === 'running' || status.status === 'indexing' || status.status === 'pending';
+  return (
+    status.status === 'running' ||
+    status.status === 'indexing' ||
+    status.status === 'pending'
+  );
 }
 
 export function pipelineStatusKey(datasourceId: string | undefined) {
@@ -28,8 +38,14 @@ export function useGetPipelineStatus(datasourceId: string | undefined) {
     queryKey: pipelineStatusKey(datasourceId),
     queryFn: async (): Promise<PipelineStatus> => {
       const [discovery, semanticModel, ontology] = await Promise.all([
-        apiGet<StageStatus>(`/datasources/${datasourceId}/discovery/status`, true),
-        apiGet<StageStatus>(`/datasources/${datasourceId}/semantic-model/status`, true),
+        apiGet<StageStatus>(
+          `/datasources/${datasourceId}/discovery/status`,
+          true,
+        ),
+        apiGet<StageStatus>(
+          `/datasources/${datasourceId}/semantic-model/status`,
+          true,
+        ),
         apiGet<StageStatus>(`/datasources/${datasourceId}/ontology`, true),
       ]);
       return {
@@ -42,7 +58,10 @@ export function useGetPipelineStatus(datasourceId: string | undefined) {
     refetchInterval: (query) => {
       const data = query.state.data;
       if (!data) return 5_000;
-      const anyRunning = isRunning(data.discovery) || isRunning(data.semanticModel) || isRunning(data.ontology);
+      const anyRunning =
+        isRunning(data.discovery) ||
+        isRunning(data.semanticModel) ||
+        isRunning(data.ontology);
       return anyRunning ? 3_000 : false;
     },
     staleTime: 0,
@@ -52,9 +71,15 @@ export function useGetPipelineStatus(datasourceId: string | undefined) {
 export function useRebuildSemanticModel(datasourceId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => apiPost<{ status: string }>(`/datasources/${datasourceId}/semantic-model`, {}),
+    mutationFn: () =>
+      apiPost<{ status: string }>(
+        `/datasources/${datasourceId}/semantic-model`,
+        {},
+      ),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: pipelineStatusKey(datasourceId) });
+      void queryClient.invalidateQueries({
+        queryKey: pipelineStatusKey(datasourceId),
+      });
     },
   });
 }
@@ -62,9 +87,12 @@ export function useRebuildSemanticModel(datasourceId: string) {
 export function useRebuildOntology(datasourceId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => apiPost<{ status: string }>(`/datasources/${datasourceId}/ontology`, {}),
+    mutationFn: () =>
+      apiPost<{ status: string }>(`/datasources/${datasourceId}/ontology`, {}),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: pipelineStatusKey(datasourceId) });
+      void queryClient.invalidateQueries({
+        queryKey: pipelineStatusKey(datasourceId),
+      });
     },
   });
 }

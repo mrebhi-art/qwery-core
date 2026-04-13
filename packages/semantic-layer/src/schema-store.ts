@@ -4,7 +4,11 @@ import { join } from 'path';
 import { getLogger } from '@qwery/shared/logger';
 
 import type { OSISemanticModel } from './osi/types';
-import type { DiscoveryStatus, DiscoveryStatusRecord, SemanticModelStatusRecord } from './types';
+import type {
+  DiscoveryStatus,
+  DiscoveryStatusRecord,
+  SemanticModelStatusRecord,
+} from './types';
 
 export interface OsiModelRecord {
   datasourceId: string;
@@ -30,7 +34,11 @@ export async function saveDiscoveryRecord(
   record: DiscoveryStatusRecord,
 ): Promise<void> {
   await ensureStoreDir();
-  await writeFile(recordPath(record.datasourceId), JSON.stringify(record, null, 2), 'utf-8');
+  await writeFile(
+    recordPath(record.datasourceId),
+    JSON.stringify(record, null, 2),
+    'utf-8',
+  );
 }
 
 export async function loadDiscoveryRecord(
@@ -60,7 +68,9 @@ export async function saveOsiModel(
   await writeFile(path, JSON.stringify(record, null, 2), 'utf-8');
 }
 
-export async function loadOsiModel(datasourceId: string): Promise<OsiModelRecord | null> {
+export async function loadOsiModel(
+  datasourceId: string,
+): Promise<OsiModelRecord | null> {
   try {
     const path = join(getStoreDir(), `${datasourceId}.osm.json`);
     const raw = await readFile(path, 'utf-8');
@@ -70,13 +80,17 @@ export async function loadOsiModel(datasourceId: string): Promise<OsiModelRecord
   }
 }
 
-export async function saveSemanticModelStatusRecord(record: SemanticModelStatusRecord): Promise<void> {
+export async function saveSemanticModelStatusRecord(
+  record: SemanticModelStatusRecord,
+): Promise<void> {
   await ensureStoreDir();
   const path = join(getStoreDir(), `${record.datasourceId}.sm-status.json`);
   await writeFile(path, JSON.stringify(record, null, 2), 'utf-8');
 }
 
-export async function loadSemanticModelStatusRecord(datasourceId: string): Promise<SemanticModelStatusRecord | null> {
+export async function loadSemanticModelStatusRecord(
+  datasourceId: string,
+): Promise<SemanticModelStatusRecord | null> {
   try {
     const path = join(getStoreDir(), `${datasourceId}.sm-status.json`);
     const raw = await readFile(path, 'utf-8');

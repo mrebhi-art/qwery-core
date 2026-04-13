@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { adaptMetadataToDiscoveredSchema } from '../src/adapters/metadata.adapter';
 import type { DatasourceMetadata } from '@qwery/extensions-sdk/metadata';
 
-function makeMetadata(overrides: Partial<DatasourceMetadata> = {}): DatasourceMetadata {
+function makeMetadata(
+  overrides: Partial<DatasourceMetadata> = {},
+): DatasourceMetadata {
   return {
     version: '0.0.1',
     driver: 'postgresql',
@@ -20,7 +22,9 @@ function makeMetadata(overrides: Partial<DatasourceMetadata> = {}): DatasourceMe
         live_rows_estimate: 0,
         dead_rows_estimate: 0,
         comment: null,
-        primary_keys: [{ table_id: 1, name: 'id', schema: 'public', table_name: 'orders' }],
+        primary_keys: [
+          { table_id: 1, name: 'id', schema: 'public', table_name: 'orders' },
+        ],
         relationships: [
           {
             id: 1,
@@ -45,7 +49,14 @@ function makeMetadata(overrides: Partial<DatasourceMetadata> = {}): DatasourceMe
         live_rows_estimate: 0,
         dead_rows_estimate: 0,
         comment: null,
-        primary_keys: [{ table_id: 2, name: 'id', schema: 'public', table_name: 'customers' }],
+        primary_keys: [
+          {
+            table_id: 2,
+            name: 'id',
+            schema: 'public',
+            table_name: 'customers',
+          },
+        ],
         relationships: [],
       } as unknown,
     ],
@@ -117,7 +128,11 @@ function makeMetadata(overrides: Partial<DatasourceMetadata> = {}): DatasourceMe
 
 describe('adaptMetadataToDiscoveredSchema', () => {
   it('maps tables and columns correctly', () => {
-    const result = adaptMetadataToDiscoveredSchema('ds-1', 'postgresql', makeMetadata());
+    const result = adaptMetadataToDiscoveredSchema(
+      'ds-1',
+      'postgresql',
+      makeMetadata(),
+    );
 
     expect(result.datasourceId).toBe('ds-1');
     expect(result.datasourceProvider).toBe('postgresql');
@@ -131,7 +146,11 @@ describe('adaptMetadataToDiscoveredSchema', () => {
   });
 
   it('marks primary key columns correctly', () => {
-    const result = adaptMetadataToDiscoveredSchema('ds-1', 'postgresql', makeMetadata());
+    const result = adaptMetadataToDiscoveredSchema(
+      'ds-1',
+      'postgresql',
+      makeMetadata(),
+    );
     const orders = result.tables.find((t) => t.name === 'orders')!;
     const idCol = orders.columns.find((c) => c.name === 'id')!;
     const fkCol = orders.columns.find((c) => c.name === 'customer_id')!;
@@ -141,7 +160,11 @@ describe('adaptMetadataToDiscoveredSchema', () => {
   });
 
   it('extracts foreign keys grouped by constraint name', () => {
-    const result = adaptMetadataToDiscoveredSchema('ds-1', 'postgresql', makeMetadata());
+    const result = adaptMetadataToDiscoveredSchema(
+      'ds-1',
+      'postgresql',
+      makeMetadata(),
+    );
 
     expect(result.foreignKeys).toHaveLength(1);
     expect(result.foreignKeys[0]).toMatchObject({
@@ -158,7 +181,9 @@ describe('adaptMetadataToDiscoveredSchema', () => {
   it('groups multi-column foreign keys under one entry', () => {
     const metadata = makeMetadata();
     // Add a second column to the same FK constraint
-    (metadata.tables[0] as unknown as { relationships: unknown[] }).relationships.push({
+    (
+      metadata.tables[0] as unknown as { relationships: unknown[] }
+    ).relationships.push({
       id: 2,
       constraint_name: 'orders_customer_id_fkey',
       source_schema: 'public',
@@ -169,10 +194,17 @@ describe('adaptMetadataToDiscoveredSchema', () => {
       target_column_name: 'region',
     });
 
-    const result = adaptMetadataToDiscoveredSchema('ds-1', 'postgresql', metadata);
+    const result = adaptMetadataToDiscoveredSchema(
+      'ds-1',
+      'postgresql',
+      metadata,
+    );
 
     expect(result.foreignKeys).toHaveLength(1);
-    expect(result.foreignKeys[0]!.fromColumns).toEqual(['customer_id', 'customer_region']);
+    expect(result.foreignKeys[0]!.fromColumns).toEqual([
+      'customer_id',
+      'customer_region',
+    ]);
     expect(result.foreignKeys[0]!.toColumns).toEqual(['id', 'region']);
   });
 
@@ -182,7 +214,11 @@ describe('adaptMetadataToDiscoveredSchema', () => {
       { schema: 'public', name: 'orders' },
     ];
 
-    const result = adaptMetadataToDiscoveredSchema('ds-1', 'postgresql', metadata);
+    const result = adaptMetadataToDiscoveredSchema(
+      'ds-1',
+      'postgresql',
+      metadata,
+    );
     const orders = result.tables.find((t) => t.name === 'orders')!;
 
     expect(orders.type).toBe('VIEW');
@@ -190,17 +226,27 @@ describe('adaptMetadataToDiscoveredSchema', () => {
 
   it('returns empty foreignKeys when no relationships exist', () => {
     const metadata = makeMetadata();
-    (metadata.tables as unknown as Array<{ relationships: unknown[] }>).forEach((t) => {
-      t.relationships = [];
-    });
+    (metadata.tables as unknown as Array<{ relationships: unknown[] }>).forEach(
+      (t) => {
+        t.relationships = [];
+      },
+    );
 
-    const result = adaptMetadataToDiscoveredSchema('ds-1', 'postgresql', metadata);
+    const result = adaptMetadataToDiscoveredSchema(
+      'ds-1',
+      'postgresql',
+      metadata,
+    );
     expect(result.foreignKeys).toHaveLength(0);
   });
 
   it('sets discoveredAt as a valid ISO string', () => {
     const before = new Date().toISOString();
-    const result = adaptMetadataToDiscoveredSchema('ds-1', 'postgresql', makeMetadata());
+    const result = adaptMetadataToDiscoveredSchema(
+      'ds-1',
+      'postgresql',
+      makeMetadata(),
+    );
     const after = new Date().toISOString();
 
     expect(result.discoveredAt >= before).toBe(true);

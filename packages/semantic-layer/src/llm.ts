@@ -4,14 +4,19 @@ import { ChatAnthropic } from '@langchain/anthropic';
 export type ChatModel = AzureChatOpenAI | ChatOpenAI | ChatAnthropic;
 
 export function getChatModel(temperature = 1): ChatModel {
-  const azureApiKey = process.env['AZURE_API_KEY'] ?? process.env['AZURE_OPENAI_API_KEY'];
-  const azureEndpoint = process.env['AZURE_RESOURCE_NAME'] ?? process.env['AZURE_OPENAI_ENDPOINT'];
+  const azureApiKey =
+    process.env['AZURE_API_KEY'] ?? process.env['AZURE_OPENAI_API_KEY'];
+  const azureEndpoint =
+    process.env['AZURE_RESOURCE_NAME'] ?? process.env['AZURE_OPENAI_ENDPOINT'];
   const azureDeployment = process.env['AZURE_OPENAI_DEPLOYMENT'];
-  const azureApiVersion = process.env['AZURE_OPENAI_API_VERSION'] ?? '2024-08-01-preview';
+  const azureApiVersion =
+    process.env['AZURE_OPENAI_API_VERSION'] ?? '2024-08-01-preview';
   const azureAvailable = !!(azureApiKey && azureEndpoint && azureDeployment);
 
   // Explicit provider wins; otherwise auto-detect from available credentials
-  const provider = process.env['LLM_DEFAULT_PROVIDER'] ?? (azureAvailable ? 'azure' : 'openai');
+  const provider =
+    process.env['LLM_DEFAULT_PROVIDER'] ??
+    (azureAvailable ? 'azure' : 'openai');
 
   if (provider === 'anthropic') {
     return new ChatAnthropic({

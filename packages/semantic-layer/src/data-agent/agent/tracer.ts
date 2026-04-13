@@ -8,7 +8,11 @@ type RawWithUsage = {
   raw?: { usage_metadata?: { input_tokens?: number; output_tokens?: number } };
 };
 
-function extractTokens(result: unknown): { prompt: number; completion: number; total: number } {
+function extractTokens(result: unknown): {
+  prompt: number;
+  completion: number;
+  total: number;
+} {
   // Structured output (includeRaw: true) — result.raw.usage_metadata
   const withRaw = result as RawWithUsage;
   if (withRaw?.raw?.usage_metadata) {

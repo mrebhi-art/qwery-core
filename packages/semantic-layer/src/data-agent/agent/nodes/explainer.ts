@@ -1,13 +1,26 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import type { DataAgentStateType } from '../../state';
 import type { EmitFn, ExplainerOutput, DataLineage } from '../../types';
-import { buildExplainerPrompt, buildConversationalPrompt } from '../prompts/explainer.prompt';
+import {
+  buildExplainerPrompt,
+  buildConversationalPrompt,
+} from '../prompts/explainer.prompt';
 import type { ChatModel } from '../../../llm';
 import type { DataAgentTracer } from '../tracer';
 
-export function createExplainerNode(llm: ChatModel, emit: EmitFn, tracer: DataAgentTracer) {
-  return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
-    emit({ type: 'phase_start', phase: 'explainer', description: 'Generating answer' });
+export function createExplainerNode(
+  llm: ChatModel,
+  emit: EmitFn,
+  tracer: DataAgentTracer,
+) {
+  return async (
+    state: DataAgentStateType,
+  ): Promise<Partial<DataAgentStateType>> => {
+    emit({
+      type: 'phase_start',
+      phase: 'explainer',
+      description: 'Generating answer',
+    });
 
     const plan = state.plan!;
     const joinPlan = state.joinPlan;
@@ -21,7 +34,12 @@ export function createExplainerNode(llm: ChatModel, emit: EmitFn, tracer: DataAg
           : '',
       ].join('');
 
-      const output: ExplainerOutput = { narrative, charts: [], lineage: { datasetsUsed: [], joins: [] }, caveats: [] };
+      const output: ExplainerOutput = {
+        narrative,
+        charts: [],
+        lineage: { datasetsUsed: [], joins: [] },
+        caveats: [],
+      };
       emit({ type: 'phase_artifact', phase: 'explainer', artifact: output });
       emit({ type: 'text', content: narrative });
       emit({ type: 'phase_complete', phase: 'explainer' });
@@ -36,14 +54,24 @@ export function createExplainerNode(llm: ChatModel, emit: EmitFn, tracer: DataAg
         state.conversationContext,
         joinPlan?.relevantDatasets,
       );
-      const response = await tracer.trace('explainer', 'conversational_answer', false, () =>
-        llm.invoke([
-          new SystemMessage(conversationalPrompt),
-          new HumanMessage(state.userQuestion),
-        ]),
+      const response = await tracer.trace(
+        'explainer',
+        'conversational_answer',
+        false,
+        () =>
+          llm.invoke([
+            new SystemMessage(conversationalPrompt),
+            new HumanMessage(state.userQuestion),
+          ]),
       );
-      const narrative = typeof response.content === 'string' ? response.content : '';
-      const output: ExplainerOutput = { narrative, charts: [], lineage: { datasetsUsed: [], joins: [] }, caveats: [] };
+      const narrative =
+        typeof response.content === 'string' ? response.content : '';
+      const output: ExplainerOutput = {
+        narrative,
+        charts: [],
+        lineage: { datasetsUsed: [], joins: [] },
+        caveats: [],
+      };
       emit({ type: 'phase_artifact', phase: 'explainer', artifact: output });
       emit({ type: 'text', content: narrative });
       emit({ type: 'phase_complete', phase: 'explainer' });
@@ -65,21 +93,31 @@ export function createExplainerNode(llm: ChatModel, emit: EmitFn, tracer: DataAg
     let completionTokens = 0;
 
     try {
-      const response = await tracer.trace('explainer', 'narrative_generation', false, () =>
-        llm.invoke([
-          new SystemMessage(explainerPrompt),
-          new HumanMessage(state.userQuestion),
-        ]),
+      const response = await tracer.trace(
+        'explainer',
+        'narrative_generation',
+        false,
+        () =>
+          llm.invoke([
+            new SystemMessage(explainerPrompt),
+            new HumanMessage(state.userQuestion),
+          ]),
       );
       narrative = typeof response.content === 'string' ? response.content : '';
-      const usage = (response as { usage_metadata?: { input_tokens?: number; output_tokens?: number } }).usage_metadata;
+      const usage = (
+        response as {
+          usage_metadata?: { input_tokens?: number; output_tokens?: number };
+        }
+      ).usage_metadata;
       promptTokens = usage?.input_tokens ?? 0;
       completionTokens = usage?.output_tokens ?? 0;
     } catch {
       narrative = stepResults
         .map((r) => {
-          if (r.sqlResult) return `Results for step ${r.stepId}:\n${r.sqlResult.data}`;
-          if (r.pythonResult) return `Step ${r.stepId} output:\n${r.pythonResult.stdout}`;
+          if (r.sqlResult)
+            return `Results for step ${r.stepId}:\n${r.sqlResult.data}`;
+          if (r.pythonResult)
+            return `Step ${r.stepId} output:\n${r.pythonResult.stdout}`;
           return `Step ${r.stepId}: no results`;
         })
         .join('\n\n');
@@ -93,24 +131,32 @@ export function createExplainerNode(llm: ChatModel, emit: EmitFn, tracer: DataAg
 
     // Build lineage
     const datasetsUsed = [...new Set(plan.steps.flatMap((s) => s.datasets))];
-    const joins: DataLineage['joins'] = (joinPlan?.joinPaths ?? []).flatMap((p) =>
-      p.edges.map((e) => ({
-        from: e.fromDataset,
-        to: e.toDataset,
-        on: `${e.fromColumns.join(',')} = ${e.toColumns.join(',')}`,
-      })),
+    const joins: DataLineage['joins'] = (joinPlan?.joinPaths ?? []).flatMap(
+      (p) =>
+        p.edges.map((e) => ({
+          from: e.fromDataset,
+          to: e.toDataset,
+          on: `${e.fromColumns.join(',')} = ${e.toColumns.join(',')}`,
+        })),
     );
 
     // Caveats
     const caveats: string[] = [];
     if (state.verificationReport && !state.verificationReport.passed) {
-      caveats.push(`Verification: ${state.verificationReport.diagnosis ?? 'results may be approximate'}`);
+      caveats.push(
+        `Verification: ${state.verificationReport.diagnosis ?? 'results may be approximate'}`,
+      );
     }
     for (const amb of plan.ambiguities) {
       caveats.push(`Assumption: ${amb.question} → ${amb.assumption}`);
     }
 
-    const output: ExplainerOutput = { narrative, charts, lineage: { datasetsUsed, joins }, caveats };
+    const output: ExplainerOutput = {
+      narrative,
+      charts,
+      lineage: { datasetsUsed, joins },
+      caveats,
+    };
 
     emit({ type: 'phase_artifact', phase: 'explainer', artifact: output });
     emit({ type: 'text', content: narrative });
@@ -119,7 +165,11 @@ export function createExplainerNode(llm: ChatModel, emit: EmitFn, tracer: DataAg
     return {
       explainerOutput: output,
       currentPhase: 'explainer',
-      tokensUsed: { prompt: promptTokens, completion: completionTokens, total: promptTokens + completionTokens },
+      tokensUsed: {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: promptTokens + completionTokens,
+      },
     };
   };
 }

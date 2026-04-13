@@ -17,7 +17,12 @@ interface Props {
   onProceedWithAssumptions: () => void;
 }
 
-export function ClarificationCard({ questions, disabled, onAnswer, onProceedWithAssumptions }: Props) {
+export function ClarificationCard({
+  questions,
+  disabled,
+  onAnswer,
+  onProceedWithAssumptions,
+}: Props) {
   const { t } = useTranslation();
   const [answer, setAnswer] = useState('');
 
@@ -39,7 +44,9 @@ export function ClarificationCard({ questions, disabled, onAnswer, onProceedWith
     <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50/40 p-3 dark:border-blue-800 dark:bg-blue-950/20">
       <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-blue-700 dark:text-blue-400">
         <HelpCircle className="h-4 w-4" />
-        {t('datasource.agent.clarificationNeeded', { defaultValue: 'Clarification needed' })}
+        {t('datasource.agent.clarificationNeeded', {
+          defaultValue: 'Clarification needed',
+        })}
       </div>
 
       <div className="mb-3 space-y-2">
@@ -48,7 +55,10 @@ export function ClarificationCard({ questions, disabled, onAnswer, onProceedWith
             <p className="text-sm font-medium">{q.question}</p>
             {q.assumption && (
               <p className="text-muted-foreground text-xs">
-                {t('datasource.agent.assumption', { defaultValue: 'Assumption' })}: {q.assumption}
+                {t('datasource.agent.assumption', {
+                  defaultValue: 'Assumption',
+                })}
+                : {q.assumption}
               </p>
             )}
           </div>
@@ -75,7 +85,9 @@ export function ClarificationCard({ questions, disabled, onAnswer, onProceedWith
           onClick={onProceedWithAssumptions}
           data-test="proceed-with-assumptions"
         >
-          {t('datasource.agent.proceedWithAssumptions', { defaultValue: 'Proceed with assumptions' })}
+          {t('datasource.agent.proceedWithAssumptions', {
+            defaultValue: 'Proceed with assumptions',
+          })}
         </Button>
         <Button
           size="sm"

@@ -22,6 +22,7 @@ import {
   persistUsageResult,
   persistMessageResult,
 } from './agent-orchestration';
+import type { TraceSessionLike } from './tracing';
 
 export type AgentSessionPromptInput = {
   conversationSlug: string;
@@ -31,6 +32,7 @@ export type AgentSessionPromptInput = {
   webSearch?: boolean;
   repositories: Repositories;
   telemetry: TelemetryManager;
+  traceSession?: TraceSessionLike;
   generateTitle?: boolean;
   /** Agent to run (e.g. 'ask' or 'query'). Defaults to 'query'. */
   agentId?: string;
@@ -166,6 +168,7 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
     model = getDefaultModel(),
     repositories,
     telemetry: _telemetry,
+    traceSession,
     generateTitle = false,
     agentId: inputAgentId,
     onAsk,
@@ -193,6 +196,8 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
   let step = 0;
   let responseToReturn: Response | null = null;
   const abortController = new AbortController();
+  const requestStartedAt = traceSession ? new Date() : null;
+  const requestStartedAtMs = traceSession ? performance.now() : null;
 
   while (true) {
     const msgs = await filterCompacted(messagesApi.stream(conversationId));
@@ -225,6 +230,7 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
         abort: abortController.signal,
         auto: (task as { auto: boolean }).auto,
         repositories,
+        traceSession,
       });
       continue;
     }
@@ -283,14 +289,35 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
 
     const agentInfo = resolveAgent(agentId);
     const { providerModel, modelForRegistry } = resolveModel(model);
-    const { reminderContext } = await loadAndFormatDatasources(
+    const datasourcesLoadStartedAt = traceSession ? new Date() : null;
+    const datasourcesLoadStartedAtMs = traceSession ? performance.now() : null;
+    const { datasources, reminderContext } = await loadAndFormatDatasources(
       conversation.datasources ?? [],
       repositories.datasource,
     );
+    if (
+      traceSession &&
+      datasourcesLoadStartedAt &&
+      datasourcesLoadStartedAtMs !== null
+    ) {
+      const endedAt = new Date();
+      traceSession.addStep({
+        type: 'custom',
+        name: 'datasources',
+        input: conversation.datasources ?? [],
+        output: datasources.map((d) => d.name),
+        error: null,
+        latencyMs: Math.round(performance.now() - datasourcesLoadStartedAtMs),
+        startedAt: datasourcesLoadStartedAt,
+        endedAt,
+        metadata: { agentId, conversationSlug },
+      });
+    }
 
     const assistantMessageId = uuidv4();
     const pendingRealtimeChunks: Uint8Array[] = [];
     const toolExecutionByCallId = new Map<string, ToolExecutionStat>();
+    let lastToolEndedAt: Date | null = null;
     const encoder = new TextEncoder();
     const enqueueToolStartChunk = (
       toolName: string,
@@ -308,6 +335,7 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
         isError: boolean;
       },
     ) => {
+      lastToolEndedAt = new Date();
       if (!toolCallId) {
         return;
       }
@@ -342,6 +370,7 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
         repositories,
         conversationId,
         attachedDatasources: input.datasources,
+        traceSession,
       },
       messages: msgs,
       ask: async (req: AskRequest) => {
@@ -358,12 +387,28 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
       onToolComplete: captureToolExecution,
     });
 
+    const toolsBuildStartedAt = traceSession ? new Date() : null;
+    const toolsBuildStartedAtMs = traceSession ? performance.now() : null;
     const { tools, close: closeMcp } = await Registry.tools.forAgent(
       agentId,
       modelForRegistry,
       getContext,
       { mcpServerUrl, webSearch: input.webSearch },
     );
+    if (traceSession && toolsBuildStartedAt && toolsBuildStartedAtMs !== null) {
+      const endedAt = new Date();
+      traceSession.addStep({
+        type: 'custom',
+        name: 'tools',
+        input: { agentId },
+        output: Object.keys(tools),
+        error: null,
+        latencyMs: Math.round(performance.now() - toolsBuildStartedAtMs),
+        startedAt: toolsBuildStartedAt,
+        endedAt,
+        metadata: { agentId, conversationSlug },
+      });
+    }
 
     insertReminders({
       messages: msgs,
@@ -371,12 +416,30 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
       context: reminderContext,
     });
 
+    const promptBuildStartedAt = traceSession ? new Date() : null;
+    const promptBuildStartedAtMs = traceSession ? performance.now() : null;
+
     const validated = await validateUIMessages({ messages });
 
     const messagesForLlm =
       msgs.length > 0
         ? msgs
         : await convertToModelMessages(validated, { tools });
+
+    if (traceSession && lastUser) {
+      const now = new Date();
+      traceSession.addStep({
+        type: 'custom',
+        name: 'messages',
+        input: lastUser,
+        output: null,
+        error: null,
+        latencyMs: 0,
+        startedAt: now,
+        endedAt: now,
+        metadata: { agentId, conversationSlug, direction: 'in' },
+      });
+    }
 
     let systemPromptForLlm =
       agentInfo.systemPrompt !== undefined && agentInfo.systemPrompt !== ''
@@ -407,6 +470,26 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
       capabilityIds.length > 0
         ? `${systemPromptForLlm}\n\nSUGGESTIONS - Capabilities: When using {{suggestion: ...}}, only suggest actions you can perform with your tools: ${capabilityIds.join(', ')}. Do not suggest CSV/PDF export, file download, or other actions you cannot perform.`
         : systemPromptForLlm;
+
+    if (traceSession && promptBuildStartedAt && promptBuildStartedAtMs !== null) {
+      const promptBuildEndedAt = new Date();
+      traceSession.addStep({
+        type: 'custom',
+        name: 'system_prompt',
+        input: {
+          messageCount: messagesForLlm.length,
+          toolCount: Object.keys(tools).length,
+        },
+        output: null,
+        error: null,
+        latencyMs: Math.round(performance.now() - promptBuildStartedAtMs),
+        startedAt: promptBuildStartedAt,
+        endedAt: promptBuildEndedAt,
+        metadata: { agentId, conversationSlug },
+      });
+    }
+
+    const llmStartedAt = traceSession ? new Date() : null;
 
     const result = await LLM.stream({
       model,
@@ -460,6 +543,56 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
         );
         const totalUsage = await result.totalUsage;
 
+        if (traceSession && llmStartedAt) {
+          const endedAt = new Date();
+          const promptTokens = totalUsage?.inputTokens ?? 0;
+          const completionTokens = totalUsage?.outputTokens ?? 0;
+          const tokenUsage = totalUsage
+            ? {
+                promptTokens,
+                completionTokens,
+                totalTokens: promptTokens + completionTokens,
+              }
+            : null;
+
+          const finalAnswerStart = lastToolEndedAt ?? llmStartedAt;
+          traceSession.addStep({
+            type: 'custom',
+            name: `final_answer: ${providerModel.id}`,
+            input: null,
+            output: [...messagesWithToolExecution]
+              .reverse()
+              .find((m) => m.role === 'assistant') ?? null,
+            tokenUsage,
+            error: null,
+            latencyMs: Math.round(endedAt.getTime() - finalAnswerStart.getTime()),
+            startedAt: finalAnswerStart,
+            endedAt,
+            metadata: { agentId, conversationSlug },
+          });
+        }
+
+        if (traceSession) {
+          const now = new Date();
+          const assistantMsg = [...messagesWithToolExecution]
+            .reverse()
+            .find((m) => m.role === 'assistant');
+          traceSession.addStep({
+            type: 'custom',
+            name: 'messages',
+            input: null,
+            output: assistantMsg ?? null,
+            error: null,
+            latencyMs: 0,
+            startedAt: now,
+            endedAt: now,
+            metadata: { agentId, conversationSlug, direction: 'out' },
+          });
+        }
+
+        const usageStartedAt = traceSession ? new Date() : null;
+        const usageStartedAtMs = traceSession ? performance.now() : null;
+
         await persistUsageResult({
           usage: totalUsage,
           model,
@@ -468,6 +601,20 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
           conversationSlug,
           label: 'AgentSession',
         });
+        if (traceSession && usageStartedAt && usageStartedAtMs !== null) {
+          const endedAt = new Date();
+          traceSession.addStep({
+            type: 'custom',
+            name: 'usage',
+            input: null,
+            output: totalUsage ?? null,
+            error: null,
+            latencyMs: Math.round(performance.now() - usageStartedAtMs),
+            startedAt: usageStartedAt,
+            endedAt,
+            metadata: { agentId, conversationSlug },
+          });
+        }
 
         const lastAssistant = [...messagesWithToolExecution]
           .reverse()
@@ -509,6 +656,28 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
           conversationSlug,
           label: 'AgentSession',
         });
+
+        if (traceSession && requestStartedAt && requestStartedAtMs !== null) {
+          const endedAt = new Date();
+          traceSession.addStep({
+            type: 'custom',
+            name: 'query',
+            input: { conversationSlug, agentId },
+            output: null,
+            error: null,
+            latencyMs: Math.round(performance.now() - requestStartedAtMs),
+            startedAt: requestStartedAt,
+            endedAt,
+            metadata: { agentId, conversationSlug },
+          });
+        }
+        if (
+          traceSession &&
+          'complete' in traceSession &&
+          typeof traceSession.complete === 'function'
+        ) {
+          traceSession.complete({ output: null });
+        }
       },
     });
 
@@ -675,7 +844,7 @@ export async function loop(input: AgentSessionPromptInput): Promise<Response> {
     break;
   }
 
-  await SessionCompaction.prune({ conversationSlug, repositories });
+  await SessionCompaction.prune({ conversationSlug, repositories, traceSession });
 
   if (responseToReturn !== null) return responseToReturn;
   return new Response(null, { status: 204 });

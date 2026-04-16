@@ -1,0 +1,158 @@
+$ bun evals-regression/suites/benchmarks/bird-california-schools.ts
+
+  BIRD Benchmark
+  dataset: bird-mini_dev_sqlite-california_schools-simple-limit-10
+
+  Creating / resolving datasetΓÇª
+  Uploading examplesΓÇª
+  Run 1dbd2767-f0ed-40e5-b8b6-51552f121fca started
+
+  Γ£ù california_schools__5
+    Error: bird-single-turn timed out after 60000ms for dbId=california_schools (attempt=1, elapsed=60072ms, answer_seen=false, first_stdout_ms=1207, last_stdout_ms=42517).
+stderr:
+AI SDK Warning (ollama-cloud.chat / minimax-m2.5): The feature "specificationVersion" is used in a compatibility mode. Using v2 specification compatibility mode. Some features may not be available.
+    Extracted SQL:
+      bird-single-turn timed out after 60000ms for dbId=california_schools (attempt=1, elapsed=60072ms, answer_seen=false, first_stdout_ms=1207, last_stdout_ms=42517).
+      stderr:
+      AI SDK Warning (ollama-cloud.chat / minimax-m2.5): The feature "specificationVersion" is used in a compatibility mode. Using v2 sp... [truncated 67 chars]
+    Golden SQL: SELECT COUNT(DISTINCT T2.School) FROM satscores AS T1 INNER JOIN schools AS T2 ON T1.cds = T2.CDSCode WHERE T2.Virtual = 'F' AND T1.AvgScrMath > 400
+  Γ£ù california_schools__11
+    Error: bird-single-turn timed out after 60000ms for dbId=california_schools (attempt=1, elapsed=60048ms, answer_seen=false, first_stdout_ms=1221, last_stdout_ms=46150).
+stderr:
+AI SDK Warning (ollama-cloud.chat / minimax-m2.5): The feature "specificationVersion" is used in a compatibility mode. Using v2 specification compatibility mode. Some features may not be available.
+    Extracted SQL:
+      bird-single-turn timed out after 60000ms for dbId=california_schools (attempt=1, elapsed=60048ms, answer_seen=false, first_stdout_ms=1221, last_stdout_ms=46150).
+      stderr:
+      AI SDK Warning (ollama-cloud.chat / minimax-m2.5): The feature "specificationVersion" is used in a compatibility mode. Using v2 sp... [truncated 67 chars]
+    Golden SQL: SELECT T2.CDSCode FROM schools AS T1 INNER JOIN frpm AS T2 ON T1.CDSCode = T2.CDSCode WHERE T2.`Enrollment (K-12)` + T2.`Enrollment (Ages 5-17)` > 500
+  Γ£ù california_schools__17 (0.29)
+    Output:
+      Here are the schools ranked by their average Writing score (where score > 499), showing only schools with valid charter numbers:
+      
+      | Rank | School Name | Charter Number | Avg Writing Score |
+      |------|-------------|----------------|-------------------|
+      | 1 | Pacific Collegiate Charter | 0210 | 630 |
+      | ... [truncated 593 chars]
+    Tool Calls:
+      [{"tool":"search_ontology","state":"output-available","query":"schools writing score charter","executionTimeMs":514.91},{"tool":"getSchema","state":"output-available","executionTimeMs":113.19},{"tool":"runQuery","state":"output-error","query":"SELECT s.school AS school_name, s.charter_num AS charter... [truncated 892 chars]
+    Generated SQL:
+      SELECT s.school AS school_name, s."CharterNum" AS charter_number, AVG(sat.avgscrwrite) AS avg_writing_score
+      FROM main.schools s
+      JOIN main.satscores sat ON s.cdscode = sat.cds
+      WHERE sat.avgscrwrite > 499
+        AND s."CharterNum" IS NOT NULL
+      GROUP BY s.school, s."CharterNum"
+      ORDER BY avg_writing_score DES... [truncated 1 chars]
+    SQL exec ms: 49.28
+    Tokens: in=37727 out=1028 total=38755
+    Golden SQL: SELECT CharterNum, AvgScrWrite, RANK() OVER (ORDER BY AvgScrWrite DESC) AS WritingScoreRank FROM schools AS T1  INNER JOIN satscores AS T2 ON T1.CDSCode = T2.cds WHERE T2.AvgScrWrite > 499 AND CharterNum is not null
+    sql_syntax_valid                 PASS
+    bird_sql_syntax_validity         PASS [custom]
+    bird_schema_grounding_score      0.23 [custom]
+    bird_structural_f1_score         0.17 [custom]
+    bird_soft_execution_accuracy     FAIL [custom]
+    bird_top_k_correctness           PASS [custom]
+    bird_execution_accuracy_ex       FAIL [custom]
+    bird_valid_efficiency_score_ves  FAIL [custom]
+    bird_soft_f1_score               FAIL [custom]
+    bird_agent_behavior_score        0.59 [custom]
+    bird_final_composite_score       0.29 [custom]
+  Γ£ù california_schools__39
+    Error: bird-single-turn timed out after 60000ms for dbId=california_schools (attempt=1, elapsed=60048ms, answer_seen=false, first_stdout_ms=1187, last_stdout_ms=1949).
+stderr:
+AI SDK Warning (ollama-cloud.chat / minimax-m2.5): The feature "specificationVersion" is used in a compatibility mode. Using v2 specification compatibility mode. Some features may not be available.
+    Extracted SQL:
+      bird-single-turn timed out after 60000ms for dbId=california_schools (attempt=1, elapsed=60048ms, answer_seen=false, first_stdout_ms=1187, last_stdout_ms=1949).
+      stderr:
+      AI SDK Warning (ollama-cloud.chat / minimax-m2.5): The feature "specificationVersion" is used in a compatibility mode. Using v2 spe... [truncated 66 chars]
+    Golden SQL: SELECT AVG(T1.NumTstTakr) FROM satscores AS T1 INNER JOIN schools AS T2 ON T1.cds = T2.CDSCode WHERE strftime('%Y', T2.OpenDate) = '1980' AND T2.County = 'Fresno'
+  Γ£ù california_schools__41
+    Error: bird-single-turn timed out after 60000ms for dbId=california_schools (attempt=1, elapsed=60044ms, answer_seen=false, first_stdout_ms=1375, last_stdout_ms=58756).
+stderr:
+AI SDK Warning (ollama-cloud.chat / minimax-m2.5): The feature "specificationVersion" is used in a compatibility mode. Using v2 specification compatibility mode. Some features may not be available.
+    Extracted SQL:
+      bird-single-turn timed out after 60000ms for dbId=california_schools (attempt=1, elapsed=60044ms, answer_seen=false, first_stdout_ms=1375, last_stdout_ms=58756).
+      stderr:
+      AI SDK Warning (ollama-cloud.chat / minimax-m2.5): The feature "specificationVersion" is used in a compatibility mode. Using v2 sp... [truncated 67 chars]
+    Golden SQL: SELECT School FROM (SELECT T2.School,T1.AvgScrRead, RANK() OVER (PARTITION BY T2.County ORDER BY T1.AvgScrRead DESC) AS rnk FROM satscores AS T1 INNER JOIN schools AS T2 ON T1.cds = T2.CDSCode WHERE T2.Virtual = 'F' ) ranked_schools WHERE rnk <= 5
+  Γ£ù california_schools__46 (0.26)
+    Output:
+      Now I understand the schema. I need to find schools where DOC = 31 (State Special Schools), then order by enrollment (K-12 grades 1-12). Let me write and run a query to find the top state special schools by enrollment.
+      Based on the data, here are the **State Special Schools (DOC = 31)** with the hig... [truncated 814 chars]
+    Tool Calls:
+      [{"tool":"getSchema","state":"output-available","executionTimeMs":101.57},{"tool":"getSchema","state":"output-available","executionTimeMs":457.48},{"tool":"runQuery","state":"output-available","query":"SELECT \n    s.School,\n    s.District,\n    s.County,\n    f.\"Enrollment (K-12)\" as enrollment_... [truncated 168 chars]
+    Generated SQL: SELECT     s.School,     s.District,     s.County,     f."Enrollment (K-12)" as enrollment_k12 FROM main.schools s LEFT JOIN main.frpm f ON s.CDSCode = f.CDSCode WHERE s.DOC = '31' ORDER BY f."Enrollment (K-12)" DESC LIMIT 20
+    SQL exec ms: 67.45
+    Tokens: in=28120 out=965 total=29085
+    Golden SQL: SELECT T2.School FROM frpm AS T1 INNER JOIN schools AS T2 ON T1.CDSCode = T2.CDSCode WHERE T2.DOC = 31 ORDER BY T1.`Enrollment (K-12)` DESC LIMIT 1
+    sql_syntax_valid                 PASS
+    bird_sql_syntax_validity         PASS [custom]
+    bird_schema_grounding_score      0.33 [custom]
+    bird_structural_f1_score         0.17 [custom]
+    bird_soft_execution_accuracy     FAIL [custom]
+    bird_top_k_correctness           FAIL [custom]
+    bird_execution_accuracy_ex       FAIL [custom]
+    bird_valid_efficiency_score_ves  FAIL [custom]
+    bird_soft_f1_score               FAIL [custom]
+    bird_agent_behavior_score        0.88 [custom]
+    bird_final_composite_score       0.26 [custom]
+  Γ£ù california_schools__50 (0.28)
+    Output:
+      I can see three datasets. The satscores table likely contains Math averages, and schools table has address information. Let me explore these schemas.
+      Now I understand the schema. I need to:
+      1. Find schools with their Math averages (from satscores)
+      2. Join with schools table to get address informatio... [truncated 493 chars]
+    Tool Calls:
+      [{"tool":"getSchema","state":"output-available","executionTimeMs":127.14},{"tool":"getSchema","state":"output-available","executionTimeMs":424.67},{"tool":"get_relationships","state":"output-available","executionTimeMs":13.46},{"tool":"runQuery","state":"output-available","query":"SELECT s.School, s... [truncated 238 chars]
+    Generated SQL: SELECT s.School, s.MailStreet AS postal_street_address FROM main.satscores sat JOIN main.schools s ON sat.cds = s.CDSCode WHERE sat.rtype = 'S'   AND sat.AvgScrMath IS NOT NULL ORDER BY sat.AvgScrMath DESC LIMIT 1 OFFSET 6
+    SQL exec ms: 44.11
+    Tokens: in=36112 out=836 total=36948
+    Golden SQL: SELECT T2.MailStreet, T2.School FROM satscores AS T1 INNER JOIN schools AS T2 ON T1.cds = T2.CDSCode ORDER BY T1.AvgScrMath DESC LIMIT 6, 1
+    sql_syntax_valid                 PASS
+    bird_sql_syntax_validity         PASS [custom]
+    bird_schema_grounding_score      0.42 [custom]
+    bird_structural_f1_score         0.17 [custom]
+    bird_soft_execution_accuracy     FAIL [custom]
+    bird_top_k_correctness           FAIL [custom]
+    bird_execution_accuracy_ex       FAIL [custom]
+    bird_valid_efficiency_score_ves  FAIL [custom]
+    bird_soft_f1_score               FAIL [custom]
+    bird_agent_behavior_score        0.82 [custom]
+    bird_final_composite_score       0.28 [custom]
+  Γ£ù california_schools__82 (0.59)
+    Output:
+      I'll help you find the school with the highest longitude and determine its grade span. Let me start by exploring the schema to understand the available data.
+      Let me search the ontology to find information about the schools dataset, specifically for longitude and grade span fields.
+      Now I can see the ... [truncated 483 chars]
+    Tool Calls:
+      [{"tool":"getSchema","state":"output-available","executionTimeMs":120.22},{"tool":"search_ontology","state":"output-available","query":"schools longitude grade span","executionTimeMs":400.57},{"tool":"getSchema","state":"output-available","executionTimeMs":106.32},{"tool":"runQuery","state":"output-... [truncated 563 chars]
+    Generated SQL: SELECT GSoffered, Longitude FROM schools ORDER BY ABS(Longitude) DESC LIMIT 1
+    SQL exec ms: 48.27
+    Tokens: in=43125 out=758 total=43883
+    Golden SQL: SELECT GSoffered FROM schools ORDER BY ABS(longitude) DESC LIMIT 1
+    sql_syntax_valid                 PASS
+    bird_sql_syntax_validity         PASS [custom]
+    bird_schema_grounding_score      PASS [custom]
+    bird_structural_f1_score         0.94 [custom]
+    bird_soft_execution_accuracy     FAIL [custom]
+    bird_top_k_correctness           FAIL [custom]
+    bird_execution_accuracy_ex       FAIL [custom]
+    bird_valid_efficiency_score_ves  FAIL [custom]
+    bird_soft_f1_score               FAIL [custom]
+    bird_agent_behavior_score        0.79 [custom]
+    bird_final_composite_score       0.59 [custom]
+
+  Γ£ù Summary  0/8 passed ┬╖ avg score 0.176
+  Tokens ΓåÆ in=145084, out=3587, total=148671
+  SQL timing ΓåÆ total=209.11ms, avg=52.28ms, cases=4
+  Results ΓåÆ run 1dbd2767-f0ed-40e5-b8b6-51552f121fca
+
+Score: 0.175991452991453
+Task scores: {
+  california_schools: 0.175991452991453,
+}
+Difficulty breakdown: {
+  simple: 0.175991452991453,
+  moderate: null,
+  challenging: null,
+}

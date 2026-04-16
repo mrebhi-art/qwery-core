@@ -7,7 +7,7 @@ export function getNeo4jDriver(): Driver {
     const host = process.env['NEO4J_HOST'] ?? 'localhost';
     const port = process.env['NEO4J_PORT'] ?? '7687';
     const user = process.env['NEO4J_USER'] ?? 'neo4j';
-    const password = process.env['NEO4J_PASSWORD'] ?? 'neo4j';
+    const password = process.env['NEO4J_PASSWORD'] ?? 'neo4jpass';
 
     _driver = neo4j.driver(
       `bolt://${host}:${port}`,

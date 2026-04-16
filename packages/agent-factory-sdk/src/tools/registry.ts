@@ -25,6 +25,61 @@ import { getLogger } from '@qwery/shared/logger';
 import { getMcpTools } from '../mcp/client.js';
 import { GetTodoByConversationService } from '@qwery/domain/services';
 import type { Repositories } from '@qwery/domain/repositories';
+import type { TraceArtifact, TraceSessionLike } from '../agents/tracing';
+import { renderChartSvg } from './chart-svg-renderer';
+
+type Artifact = TraceArtifact;
+
+function extractArtifacts(toolId: string, output: unknown): Artifact[] {
+  if (output == null || typeof output !== 'object') return [];
+
+  const artifacts: Artifact[] = [];
+
+  if (toolId === 'runQuery' || toolId === 'runQueries') {
+    const out = output as Record<string, unknown>;
+    const sql = out['sqlQuery'] as string | undefined;
+    if (typeof sql === 'string' && sql.trim()) {
+      artifacts.push({
+        name: 'query.sql',
+        type: 'sql',
+        mimeType: 'text/plain',
+        data: sql,
+        encoding: 'utf8',
+      });
+    }
+
+    const result = out['result'] as
+      | { columns?: string[]; rows?: unknown[] }
+      | undefined;
+    if (result?.rows && Array.isArray(result.rows) && result.rows.length > 0) {
+      const filename = (out['exportFilename'] as string | undefined) ?? 'query-results';
+      artifacts.push({
+        name: `${filename}.json`,
+        type: 'table',
+        mimeType: 'application/json',
+        data: JSON.stringify({ columns: result.columns ?? [], rows: result.rows }),
+        encoding: 'utf8',
+      });
+    }
+  }
+
+  if (toolId === 'generateChart') {
+    const out = output as Record<string, unknown>;
+    const chartType = (out['chartType'] as string | undefined) ?? 'bar';
+    const data = (out['data'] as Array<Record<string, unknown>> | undefined) ?? [];
+    const config = (out['config'] as Record<string, unknown> | undefined) ?? {};
+    const svg = renderChartSvg(chartType, data, config);
+    artifacts.push({
+      name: `chart-${chartType}.svg`,
+      type: 'chart',
+      mimeType: 'image/svg+xml',
+      data: svg,
+      encoding: 'utf8',
+    });
+  }
+
+  return artifacts;
+}
 
 const TASK_COMPLETING_TOOL_IDS = new Set([
   'runQuery',
@@ -302,16 +357,55 @@ function buildAiTool(
         abortSignal: options.abortSignal,
       });
       const toolCallId = options.toolCallId ?? '';
+      const traceSession = context.extra?.traceSession as
+        | TraceSessionLike
+        | undefined;
+      const traceMetadata = toolCallId ? { toolCallId } : undefined;
+      const startedAt = new Date();
+      const startedAtMs = performance.now();
 
-      const raw = await trackExecution(
-        resolved,
-        args,
-        context,
-        toolCallId,
-        () => resolved.execute(args, context),
-      );
+      let raw: ToolResult;
+      let toolArtifacts: Artifact[] = [];
+      try {
+        raw = await trackExecution(resolved, args, context, toolCallId, () =>
+          resolved.execute(args, context),
+        );
+        toolArtifacts = extractArtifacts(resolved.id, raw);
+      } catch (error) {
+        if (traceSession) {
+          const endedAt = new Date();
+          traceSession.addToolStep({
+            name: resolved.id,
+            input: args,
+            output: null,
+            error: error instanceof Error ? error.message : String(error),
+            latencyMs: Math.round(performance.now() - startedAtMs),
+            startedAt,
+            endedAt,
+            metadata: traceMetadata,
+          });
+        }
+        throw error;
+      }
 
-      return postProcessOutput(raw, resolved.id, context);
+      const processed = await postProcessOutput(raw, resolved.id, context);
+
+      if (traceSession) {
+        const endedAt = new Date();
+        traceSession.addToolStep({
+          name: resolved.id,
+          input: args,
+          output: processed,
+          error: null,
+          latencyMs: Math.round(performance.now() - startedAtMs),
+          startedAt,
+          endedAt,
+          metadata: traceMetadata,
+          artifacts: toolArtifacts.length > 0 ? toolArtifacts : undefined,
+        });
+      }
+
+      return processed;
     },
   });
 }

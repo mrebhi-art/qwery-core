@@ -11,6 +11,27 @@ import { getExtra } from './tool-utils';
 
 const DESCRIPTION = `Run a SQL query directly against a single datasource using its native driver. When calling this tool, provide an exportFilename (short descriptive name for the table export, e.g. machines-active-status).`;
 
+function toJsonSafeValue(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    // Keep precision for large integers while ensuring JSON serialization safety.
+    return value.toString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => toJsonSafeValue(item));
+  }
+
+  if (value && typeof value === 'object') {
+    const output: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      output[key] = toJsonSafeValue(nested);
+    }
+    return output;
+  }
+
+  return value;
+}
+
 export const RunQueryTool = Tool.define('runQuery', {
   description: DESCRIPTION,
   parameters: z.object({
@@ -81,9 +102,13 @@ export const RunQueryTool = Tool.define('runQuery', {
         typeof col === 'string' ? col : col.name || String(col),
       );
 
+      const normalizedRows = result.rows.map((row) =>
+        toJsonSafeValue(row) as Record<string, unknown>,
+      );
+
       const fullResult = {
         columns: columnNames,
-        rows: result.rows,
+        rows: normalizedRows,
       };
 
       const extra = getExtra(ctx);

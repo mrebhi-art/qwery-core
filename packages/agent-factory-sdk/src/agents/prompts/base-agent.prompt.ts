@@ -82,7 +82,6 @@ The required workflow for any data question:
 
 **Step 4 — generateChart** (optional): Generate a chart from runQuery results. Always pass \`queryResults\` from the previous runQuery call.
 
-**getSchema** (alternative to search_ontology): Use getSchema with detailLevel="simple" only when you want a complete list of all datasets at once instead of a targeted search. Still use this BEFORE runQuery.
 
 **Summary:**
 - search_ontology → (get_relationships if multi-table) → runQuery → answer

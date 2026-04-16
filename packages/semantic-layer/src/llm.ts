@@ -3,25 +3,49 @@ import { ChatAnthropic } from '@langchain/anthropic';
 
 export type ChatModel = AzureChatOpenAI | ChatOpenAI | ChatAnthropic;
 
+function readEnv(key: string): string | undefined {
+  const value = process.env[key];
+  return value && value.trim() !== '' ? value : undefined;
+}
+
 export function getChatModel(temperature = 1): ChatModel {
   const azureApiKey =
-    process.env['AZURE_API_KEY'] ?? process.env['AZURE_OPENAI_API_KEY'];
+    readEnv('AZURE_API_KEY') ?? readEnv('AZURE_OPENAI_API_KEY');
   const azureEndpoint =
-    process.env['AZURE_RESOURCE_NAME'] ?? process.env['AZURE_OPENAI_ENDPOINT'];
-  const azureDeployment = process.env['AZURE_OPENAI_DEPLOYMENT'];
+    readEnv('AZURE_RESOURCE_NAME') ?? readEnv('AZURE_OPENAI_ENDPOINT');
+  const azureDeployment = readEnv('AZURE_OPENAI_DEPLOYMENT');
   const azureApiVersion =
-    process.env['AZURE_OPENAI_API_VERSION'] ?? '2024-08-01-preview';
+    readEnv('AZURE_OPENAI_API_VERSION') ?? '2024-08-01-preview';
   const azureAvailable = !!(azureApiKey && azureEndpoint && azureDeployment);
 
   // Explicit provider wins; otherwise auto-detect from available credentials
   const provider =
-    process.env['LLM_DEFAULT_PROVIDER'] ??
+    readEnv('LLM_DEFAULT_PROVIDER') ??
+    readEnv('AGENT_PROVIDER') ??
     (azureAvailable ? 'azure' : 'openai');
+
+  if (provider === 'ollama-cloud') {
+    const apiKey = readEnv('OLLAMA_API_KEY');
+    if (!apiKey) {
+      throw new Error(
+        "Missing required environment variable 'OLLAMA_API_KEY' for AGENT_PROVIDER=ollama-cloud",
+      );
+    }
+
+    return new ChatOpenAI({
+      apiKey,
+      model: readEnv('OLLAMA_MODEL') ?? 'minimax-m2.7',
+      temperature,
+      configuration: {
+        baseURL: readEnv('OLLAMA_BASE_URL') ?? 'https://ollama.com/v1',
+      },
+    });
+  }
 
   if (provider === 'anthropic') {
     return new ChatAnthropic({
-      apiKey: process.env['ANTHROPIC_API_KEY'],
-      model: process.env['ANTHROPIC_MODEL'] ?? 'claude-opus-4-6',
+      apiKey: readEnv('ANTHROPIC_API_KEY'),
+      model: readEnv('ANTHROPIC_MODEL') ?? 'claude-opus-4-6',
       temperature,
     });
   }
@@ -37,8 +61,8 @@ export function getChatModel(temperature = 1): ChatModel {
   }
 
   return new ChatOpenAI({
-    apiKey: process.env['OPENAI_API_KEY'],
-    model: process.env['OPENAI_MODEL'] ?? 'gpt-4o',
+    apiKey: readEnv('OPENAI_API_KEY'),
+    model: readEnv('OPENAI_MODEL') ?? 'gpt-4o',
     temperature,
   });
 }

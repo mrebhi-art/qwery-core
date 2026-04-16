@@ -30,6 +30,7 @@
     "@qwery/semantic-layer": "workspace:*",
     "@qwery/shared": "workspace:*",
     "@qwery/telemetry": "workspace:*",
+    "@qwery/tracing-sdk": "workspace:*",
     "class-transformer": "^0.5.1",
     "dssrf": "^1.0.2",
     "hono": "^4.10.7",

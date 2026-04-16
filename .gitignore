@@ -186,6 +186,7 @@ packages/agent-factory-sdk/test-business-context/.vscode/
 
 # Evals
 **/packages/agent-factory-sdk/evals
+packages/agent-factory-sdk/.tmp/
 test.db
 qwery.db
 

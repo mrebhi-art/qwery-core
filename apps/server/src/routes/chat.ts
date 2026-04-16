@@ -17,6 +17,7 @@ import { createRepositories } from '../lib/repositories';
 import { getTelemetry } from '../lib/telemetry';
 import { resolveChatDatasources } from '../helpers/chat-helper';
 import { handleDomainException } from '../lib/http-utils';
+import { getTracingSdk } from '../lib/tracing';
 
 const chatBodySchema = z.object({
   messages: z.array(z.unknown()),
@@ -54,8 +55,10 @@ export function createChatRoutes() {
         const model = body.model ?? getDefaultModel();
 
         const repositories = await getRepositories();
+        const conversationForTrace =
+          await repositories.conversation.findBySlug(slug);
         if (body.trigger === 'regenerate-message') {
-          const conversation = await repositories.conversation.findBySlug(slug);
+          const conversation = conversationForTrace;
           if (conversation) {
             const convMessages =
               await repositories.message.findByConversationId(conversation.id);
@@ -165,6 +168,40 @@ User request: ${cleanText}`;
           process.env.QWERY_MCP_SERVER_URL ??
           `${new URL(c.req.url).origin}/mcp`;
 
+        // Tracing is non-blocking and should not affect normal request flow.
+        const tracing = getTracingSdk();
+        const traceProjectId = process.env['TRACING_PROJECT_ID'] ?? 'semantic-qwery-core';
+        const lastUserMessage = messages.findLast(
+          (m) => normalizeUIRole(m.role) === 'user',
+        );
+        const extractText = (msg: unknown): string => {
+          if (!msg) return '';
+          if (typeof msg === 'string') return msg;
+          const m = msg as Record<string, unknown>;
+          if (typeof m['content'] === 'string') return m['content'];
+          if (Array.isArray(m['parts'])) {
+            return (m['parts'] as Array<Record<string, unknown>>)
+              .filter((p) => p['type'] === 'text')
+              .map((p) => p['text'])
+              .join(' ') as string;
+          }
+          return JSON.stringify(msg);
+        };
+        const traceSession = tracing
+          ? await tracing.startTrace({
+              projectId: traceProjectId,
+              conversationId: slug,
+              agentVersion: '1',
+              modelName: model,
+              input: extractText(lastUserMessage),
+              metadata: {
+                conversationSlug: slug,
+                projectId: traceProjectId,
+                trigger: body.trigger,
+              },
+            })
+          : undefined;
+
         const response = await prompt({
           conversationSlug: slug,
           messages: validatedMessages,
@@ -175,7 +212,16 @@ User request: ${cleanText}`;
           telemetry,
           generateTitle: true,
           mcpServerUrl,
+          traceSession,
+        }).catch((err: unknown) => {
+          traceSession?.fail({
+            error: err instanceof Error ? err.message : String(err),
+          });
+          void tracing?.flush();
+          throw err;
         });
+
+        await tracing?.flush();
 
         return response;
       } catch (error) {

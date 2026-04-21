@@ -59,9 +59,19 @@ const baseModels = [
     value: 'ollama-cloud/gemma4:31b-cloud',
   },
   {
+    name: 'Ollama Cloud • Gemma 4 31B',
+    shortName: 'Gemma 4 31B',
+    value: 'ollama-cloud/gemma4:31b',
+  },
+  {
     name: 'Ollama Cloud • GLM 5',
     shortName: 'GLM 5',
     value: 'ollama-cloud/glm-5',
+  },
+  {
+    name: 'Ollama Cloud • GLM 5.1',
+    shortName: 'GLM 5.1',
+    value: 'ollama-cloud/glm-5.1',
   },
   {
     name: 'Ollama Cloud • GPT OSS 120B',
@@ -72,6 +82,11 @@ const baseModels = [
     name: 'Ollama Cloud • Kimi K2.5',
     shortName: 'Kimi K2.5',
     value: 'ollama-cloud/kimi-k2.5',
+  },
+  {
+    name: 'Ollama Cloud • Kimi K2.6 Cloud',
+    shortName: 'Kimi K2.6',
+    value: 'ollama-cloud/kimi-k2.6:cloud',
   },
   {
     name: 'Ollama Cloud • MiniMax M2.7',
@@ -92,6 +107,11 @@ const baseModels = [
     name: 'Ollama Cloud • Qwen 3.5 397B',
     shortName: 'Qwen 3.5 397B',
     value: 'ollama-cloud/qwen3.5:397b',
+  },
+  {
+    name: 'Ollama Cloud • Qwen 3 Coder Next',
+    shortName: 'Qwen 3 Coder Next',
+    value: 'ollama-cloud/qwen3-coder-next',
   },
   {
     name: 'WebLLM • Llama 3.1 8B',

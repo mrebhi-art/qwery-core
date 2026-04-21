@@ -3526,6 +3526,31 @@
           "output": 65536
         }
       },
+      "gemma4:31b": {
+        "id": "gemma4:31b",
+        "name": "gemma4:31b",
+        "family": "gemma",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "knowledge": "2025-01",
+        "release_date": "2026-04-02",
+        "last_updated": "2026-04-08",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 262144,
+          "output": 8192
+        }
+      },
       "gemini-3-pro-preview": {
         "id": "gemini-3-pro-preview",
         "name": "gemini-3-pro-preview",
@@ -3576,6 +3601,32 @@
           "output": 131072
         }
       },
+      "glm-5.1": {
+        "id": "glm-5.1",
+        "name": "glm-5.1",
+        "family": "glm",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "interleaved": {
+          "field": "reasoning_content"
+        },
+        "release_date": "2026-03-27",
+        "last_updated": "2026-04-07",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 202752,
+          "output": 131072
+        }
+      },
       "gpt-oss:120b": {
         "id": "gpt-oss:120b",
         "name": "gpt-oss:120b",
@@ -3608,6 +3659,30 @@
         "tool_call": true,
         "release_date": "2026-01-27",
         "last_updated": "2026-01-27",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 262144,
+          "output": 262144
+        }
+      },
+      "kimi-k2.6:cloud": {
+        "id": "kimi-k2.6:cloud",
+        "name": "kimi-k2.6:cloud",
+        "family": "kimi",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "release_date": "2026-04-20",
+        "last_updated": "2026-04-20",
         "modalities": {
           "input": [
             "text",
@@ -3742,6 +3817,29 @@
         "limit": {
           "context": 262144,
           "output": 81920
+        }
+      },
+      "qwen3-coder-next": {
+        "id": "qwen3-coder-next",
+        "name": "qwen3-coder-next",
+        "family": "qwen",
+        "attachment": false,
+        "reasoning": false,
+        "tool_call": true,
+        "release_date": "2026-02-02",
+        "last_updated": "2026-02-08",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "open_weights": true,
+        "limit": {
+          "context": 262144,
+          "output": 65536
         }
       }
     }
